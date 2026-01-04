@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime files
+app/static/temp
+app/static/models
+app/static/results
+app/static/uploads
+app/static/datasets
+app/static/annotations
+app/static/video_frames
+app/static/video_datasets
+app/static/processed_images
+app/static/processed_videos
+app/static/augmented_datasets
+app/static/advanced_augmentations
+
+
+# Models (can be re-downloaded)
+*.pt
+*.onnx
+yolov8n
+yolo11n
+
+# Compiled executables
+*.exe
+*.bat
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+npm-debug.log*
+
