@@ -189,15 +189,29 @@ def main():
             'amp': False   # 禁用自动混合精度，避免下载额外模型
         }}
 
-        # 设置环境变量，确保TensorBoard日志写入到正确的位置
+        # 启用 TensorBoard（Ultralytics 8.3.111+ 默认关闭，必须显式打开）
         os.environ['ULTRALYTICS_TENSORBOARD'] = '1'
+        try:
+            from ultralytics import settings as ultra_settings
+            ultra_settings.update({{'tensorboard': True}})
+            print('\n=== 已启用 Ultralytics TensorBoard 日志 ===')
+        except Exception as e:
+            print('\n=== 警告: 启用 TensorBoard 设置失败: ' + str(e) + ' ===')
 
-        # 设置Ultralytics的数据集目录为当前项目目录
+        # 设置Ultralytics的数据集目录（合并写入，避免覆盖 tensorboard=true）
         import json
         from pathlib import Path
         settings_path = Path.home() / '.config' / 'Ultralytics' / 'settings.json'
         os.makedirs(settings_path.parent, exist_ok=True)
-        settings_data = {{'datasets_dir': str(Path.cwd().resolve())}}
+        settings_data = {{}}
+        try:
+            if settings_path.exists():
+                with open(settings_path, 'r') as f:
+                    settings_data = json.load(f) or {{}}
+        except Exception:
+            settings_data = {{}}
+        settings_data['datasets_dir'] = str(Path.cwd().resolve())
+        settings_data['tensorboard'] = True
         try:
             with open(settings_path, 'w') as f:
                 json.dump(settings_data, f)
