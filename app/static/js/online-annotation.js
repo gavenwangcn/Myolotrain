@@ -154,29 +154,38 @@ class OnlineAnnotation {
         const datasetContainer = document.getElementById('dataset-source-container');
         const directoryContainer = document.getElementById('directory-source-container');
         const uploadContainer = document.getElementById('upload-source-container');
+        const folderContainer = document.getElementById('folder-source-container');
         
         imageSourceRadios.forEach(radio => {
-            radio.addEventListener('change', function() {
+            radio.addEventListener('change', () => {
                 // 隐藏所有容器
-                datasetContainer.style.display = 'none';
-                directoryContainer.style.display = 'none';
-                uploadContainer.style.display = 'none';
+                if (datasetContainer) datasetContainer.style.display = 'none';
+                if (directoryContainer) directoryContainer.style.display = 'none';
+                if (uploadContainer) uploadContainer.style.display = 'none';
+                if (folderContainer) folderContainer.style.display = 'none';
                 
-                // 显示选中的容器
-                if (this.value === 'dataset') {
-                    datasetContainer.style.display = 'block';
-                } else if (this.value === 'directory') {
-                    directoryContainer.style.display = 'block';
-                    // 绑定目录浏览按钮
+                // 显示选中的容器（用箭头函数，保留 OnlineAnnotation 实例的 this）
+                if (radio.value === 'dataset') {
+                    if (datasetContainer) datasetContainer.style.display = 'block';
+                } else if (radio.value === 'directory') {
+                    if (directoryContainer) directoryContainer.style.display = 'block';
                     this.bindDirectoryBrowseButton();
-                } else if (this.value === 'upload') {
-                    uploadContainer.style.display = 'block';
+                } else if (radio.value === 'upload') {
+                    if (uploadContainer) uploadContainer.style.display = 'block';
+                } else if (radio.value === 'folder') {
+                    if (folderContainer) folderContainer.style.display = 'block';
                 }
             });
         });
         
+        // 打开弹窗时若已选「服务器目录」，立刻绑定浏览按钮
+        const checked = document.querySelector('input[name="image-source"]:checked');
+        if (checked && checked.value === 'directory') {
+            this.bindDirectoryBrowseButton();
+        }
+        
         // 默认显示上传容器
-        uploadContainer.style.display = 'block';
+        if (uploadContainer) uploadContainer.style.display = 'block';
     }
 
     // 绑定目录浏览按钮

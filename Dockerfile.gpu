@@ -1,61 +1,47 @@
-FROM nvidia/cuda:12.0.1-cudnn8-runtime-ubuntu22.04
+# GPU 版：使用 Python 基础镜像 + PyTorch CUDA wheel（无需拉取 nvidia/cuda 大镜像）
+FROM docker.m.daocloud.io/library/python:3.12-slim
 
-# 使用国内镜像源加速 apt
-RUN sed -i 's/archive.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list && \
-    sed -i 's/security.ubuntu.com/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+# 配置 apt 使用国内镜像源
+RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
+RUN sed -i 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
 
-# 避免交互提示
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装 Python 3.12 和系统依赖
-RUN apt-get update && \
-    apt-get install -y software-properties-common && \
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get update && \
-    apt-get install -y \
-    python3.12 \
-    python3.12-dev \
-    python3.12-venv \
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     ffmpeg \
     libsm6 \
     libxext6 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# 创建python3.12的符号链接，确保命令可用
-RUN ln -sf /usr/bin/python3.12 /usr/bin/python3 && \
-    ln -sf /usr/bin/python3.12 /usr/bin/python && \
-    ln -sf /usr/bin/pip3 /usr/bin/pip
-
-# 安装 pip 并升级 setuptools
-RUN python3.12 -m ensurepip --upgrade && \
-    python3.12 -m pip install --upgrade pip setuptools
-
-# 设置 pip 使用国内镜像源（全局生效）
-ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-ENV PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
-
-# 设置工作目录
 WORKDIR /app
 
-# 复制依赖文件并安装
+# 配置 pip 国内镜像
+RUN mkdir -p /root/.pip && \
+    echo "[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn" > /root/.pip/pip.conf
+
 COPY requirements.txt .
-# 安装基础依赖，并添加GPU版本的onnxruntime 1.21.0
-RUN python3.12 -m pip install --no-cache-dir -r requirements.txt onnxruntime-gpu==1.21.0 --break-system-packages
 
-# PyTorch已经在requirements.txt中安装，这里不需要重复安装
-# 如果需要特定版本，可以取消注释下面这行并使用国内镜像源
-# RUN python3.12 -m pip install torch torchvision torchaudio --index-url https://pypi.tuna.tsinghua.edu.cn/simple --break-system-packages
+# PyTorch GPU 2.6.0 + CUDA 12.6（与 README 开发环境一致，避免拉取最新超大包）
+RUN pip install --no-cache-dir \
+    torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
+    --index-url https://download.pytorch.org/whl/cu126
 
-# 复制应用代码
+ENV PIP_DEFAULT_TIMEOUT=300
+
+# 其余依赖 + GPU 版 onnxruntime
+RUN pip install --no-cache-dir --retries 5 --timeout 300 \
+    -r requirements.txt onnxruntime-gpu==1.21.0
+
 COPY . .
 
-# 创建必要的目录
-RUN mkdir -p app/static/uploads app/static/datasets app/static/models app/static/results app/static/annotations logs/tensorboard
+RUN mkdir -p app/static/uploads app/static/datasets app/static/models app/static/results app/static/annotations logs/tensorboard models
 
-# 暴露端口
 EXPOSE 8000 6006
 
-# 启动命令
-CMD ["python3.12", "run.py"]
+CMD ["python", "run.py"]
