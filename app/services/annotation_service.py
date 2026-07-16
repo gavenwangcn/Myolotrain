@@ -285,6 +285,15 @@ class AnnotationService:
             label_file = target_dir / "labels" / f"{Path(img.image_name).stem}.txt"
             with open(label_file, 'w') as f:
                 f.write('\n'.join(label_content))
+
+            # 复制图片文件（必须在打包 ZIP 之前完成）
+            if export_request.include_images:
+                source_image = self._resolve_annotation_image_path(project, img)
+                if source_image and source_image.exists():
+                    target_image = target_dir / "images" / img.image_name
+                    shutil.copy2(source_image, target_image)
+                else:
+                    print(f"警告: 导出时找不到图片文件: {img.image_name}, path={getattr(img, 'image_path', None)}")
         
         # 创建classes.txt文件
         classes_file = export_dir / "classes.txt"
@@ -293,8 +302,8 @@ class AnnotationService:
                 f.write(f"{class_name}\n")
         
         # 创建dataset.yaml文件
-        yaml_file = export_dir / "dataset.yaml"
-        yaml_content = f"""# YOLO dataset configuration
+        if export_request.split_data:
+            yaml_content = f"""# YOLO dataset configuration
 path: {export_dir.name}
 train: train/images
 val: val/images
@@ -303,49 +312,44 @@ test: test/images
 nc: {len(project.classes)}
 names: {project.classes}
 """
+        else:
+            yaml_content = f"""# YOLO dataset configuration
+path: {export_dir.name}
+train: images
+val: images
+
+nc: {len(project.classes)}
+names: {project.classes}
+"""
+        yaml_file = export_dir / "dataset.yaml"
         with open(yaml_file, 'w', encoding='utf-8') as f:
             f.write(yaml_content)
         
         # 创建ZIP文件
         zip_path = export_dir.parent / f"{project.name}_export.zip"
         shutil.make_archive(str(zip_path.with_suffix('')), 'zip', export_dir)
-        return str(zip_path)      
-    
-        # 复制图片文件（如果需要）
-        if export_request.include_images:
-            source_image = Path(project.image_directory) / img.image_name
-        if source_image.exists():
-            target_image = target_dir / "images" / img.image_name
-            shutil.copy2(source_image, target_image)
-        
-        # 创建classes.txt
-        classes_file = export_dir / "classes.txt"
-        with open(classes_file, 'w', encoding='utf-8') as f:
-            for cls in project.classes:
-                f.write(f"{cls}\n")
-        
-        # 创建dataset.yaml
-        yaml_content = f"""path: {export_dir}
-train: {'train/images' if export_request.split_data else 'images'}
-val: {'val/images' if export_request.split_data else 'images'}
-test: {'test/images' if export_request.split_data else 'images'}
-nc: {len(project.classes)}
-names: {project.classes}"""
-        
-        yaml_file = export_dir / "dataset.yaml"
-        with open(yaml_file, 'w', encoding='utf-8') as f:
-            f.write(yaml_content)
-        
-        # 创建临时ZIP文件用于下载
-        temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-        with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, dirs, files in os.walk(export_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, export_dir)
-                    zipf.write(file_path, arcname)
-        
-        return temp_zip.name
+        return str(zip_path)
+
+    def _resolve_annotation_image_path(self, project: AnnotationProject, img) -> Optional[Path]:
+        """解析标注图片在服务器上的实际路径"""
+        candidates = []
+        if getattr(img, "image_path", None):
+            image_path = str(img.image_path)
+            if image_path.startswith("datasets/") or image_path.startswith("annotations/"):
+                candidates.append(Path("app/static") / image_path)
+            candidates.append(Path(image_path))
+            if not Path(image_path).is_absolute():
+                candidates.append(settings.STATIC_DIR / image_path)
+        if project.image_directory:
+            candidates.append(Path(project.image_directory) / img.image_name)
+            candidates.append(settings.STATIC_DIR / project.image_directory / img.image_name)
+        for path in candidates:
+            try:
+                if path.exists():
+                    return path
+            except OSError:
+                continue
+        return candidates[0] if candidates else None
     
     def create_project_with_zip(
         self,

@@ -188,43 +188,123 @@ class OnlineAnnotation {
         if (uploadContainer) uploadContainer.style.display = 'block';
     }
 
-    // 绑定目录浏览按钮
+    // 绑定目录浏览按钮（在当前弹窗内嵌套选择，避免 Bootstrap 双层 modal 被挡住）
     bindDirectoryBrowseButton() {
         const browseBtn = document.getElementById('browse-image-directory-btn');
         const directoryInput = document.getElementById('annotation-image-directory');
         const scanResultDiv = document.getElementById('directory-scan-result');
         const imageCountSpan = document.getElementById('directory-image-count');
+        const container = document.getElementById('directory-source-container');
         
-        if (browseBtn && !browseBtn.hasAttribute('data-bound')) {
-            browseBtn.setAttribute('data-bound', 'true');
-            browseBtn.addEventListener('click', function() {
-                if (window.directoryBrowser) {
-                    window.directoryBrowser.show(function(selectedPath) {
-                        directoryInput.value = selectedPath;
-                        
-                        // 扫描选中目录的图片
-                        authenticatedFetch(`/api/annotation/scan-directory-images?directory_path=${encodeURIComponent(selectedPath)}`)
-                            .then(response => response.json())
-                            .then(data => {
-                                imageCountSpan.textContent = data.image_count;
-                                scanResultDiv.style.display = 'block';
-                                
-                                if (data.is_valid) {
-                                    scanResultDiv.querySelector('.alert').className = 'alert alert-success';
-                                } else {
-                                    scanResultDiv.querySelector('.alert').className = 'alert alert-warning';
-                                }
-                            })
-                            .catch(error => {
-                                console.error('扫描图片失败:', error);
-                                scanResultDiv.style.display = 'none';
-                            });
-                    });
-                } else {
-                    alert('目录浏览器未加载，请刷新页面重试');
-                }
-            });
+        if (!browseBtn || !container) return;
+        
+        // 每次打开创建弹窗都会重建 DOM，必须重新绑定
+        browseBtn.onclick = () => {
+            this.showInlineDirectoryPicker(container, directoryInput, scanResultDiv, imageCountSpan);
+        };
+    }
+
+    // 在「创建标注项目」弹窗内部显示目录选择器（不另开一层 modal）
+    showInlineDirectoryPicker(container, directoryInput, scanResultDiv, imageCountSpan) {
+        let panel = document.getElementById('annotation-inline-dir-browser');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'annotation-inline-dir-browser';
+            panel.className = 'border rounded p-2 mt-2 bg-light';
+            container.appendChild(panel);
         }
+        panel.style.display = 'block';
+        panel.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong><i class="bi bi-folder2-open"></i> 选择服务器目录</strong>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="inline-dir-close">关闭</button>
+            </div>
+            <div class="small text-muted mb-2">Docker 环境下浏览的是容器内路径（如 /app/app/static）</div>
+            <ol class="breadcrumb mb-2" id="inline-dir-breadcrumb"><li class="breadcrumb-item active">加载中...</li></ol>
+            <div class="list-group" id="inline-dir-list" style="max-height: 260px; overflow-y: auto;">
+                <div class="list-group-item text-muted">加载中...</div>
+            </div>
+            <div class="mt-2 d-flex gap-2">
+                <button type="button" class="btn btn-primary btn-sm" id="inline-dir-select" disabled>使用当前目录</button>
+            </div>
+        `;
+
+        let currentPath = '';
+        const listEl = document.getElementById('inline-dir-list');
+        const breadcrumbEl = document.getElementById('inline-dir-breadcrumb');
+        const selectBtn = document.getElementById('inline-dir-select');
+
+        document.getElementById('inline-dir-close').onclick = () => {
+            panel.style.display = 'none';
+        };
+
+        const loadDir = async (path = '') => {
+            listEl.innerHTML = '<div class="list-group-item text-muted">加载中...</div>';
+            try {
+                const response = await fetch(`/api/annotation/browse-directories?path=${encodeURIComponent(path)}`);
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || `HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                currentPath = data.current_path || '';
+                selectBtn.disabled = !currentPath;
+
+                breadcrumbEl.innerHTML = '';
+                const rootLi = document.createElement('li');
+                rootLi.className = 'breadcrumb-item';
+                rootLi.innerHTML = '<a href="#">根目录</a>';
+                rootLi.querySelector('a').onclick = (e) => { e.preventDefault(); loadDir(''); };
+                breadcrumbEl.appendChild(rootLi);
+                if (currentPath) {
+                    const curLi = document.createElement('li');
+                    curLi.className = 'breadcrumb-item active';
+                    curLi.textContent = currentPath;
+                    breadcrumbEl.appendChild(curLi);
+                }
+
+                listEl.innerHTML = '';
+                const items = data.items || [];
+                if (items.length === 0) {
+                    listEl.innerHTML = '<div class="list-group-item text-muted">此目录为空</div>';
+                    return;
+                }
+                items.forEach(item => {
+                    const row = document.createElement('button');
+                    row.type = 'button';
+                    row.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                    row.innerHTML = `<span><i class="bi bi-folder text-primary me-2"></i>${item.name}</span><span class="badge bg-secondary">进入</span>`;
+                    row.onclick = () => loadDir(item.path);
+                    listEl.appendChild(row);
+                });
+            } catch (error) {
+                console.error('加载目录失败:', error);
+                listEl.innerHTML = `<div class="list-group-item text-danger">加载失败: ${error.message}</div>`;
+            }
+        };
+
+        selectBtn.onclick = () => {
+            if (!currentPath) return;
+            directoryInput.value = currentPath;
+            panel.style.display = 'none';
+            // 扫描图片数量
+            fetch(`/api/annotation/scan-directory-images?directory_path=${encodeURIComponent(currentPath)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (imageCountSpan) imageCountSpan.textContent = data.image_count ?? 0;
+                    if (scanResultDiv) {
+                        scanResultDiv.style.display = 'block';
+                        const alertEl = scanResultDiv.querySelector('.alert');
+                        if (alertEl) {
+                            alertEl.className = data.is_valid ? 'alert alert-success' : 'alert alert-warning';
+                        }
+                    }
+                })
+                .catch(err => console.error('扫描图片失败:', err));
+        };
+
+        // Docker 容器内优先从 /app 开始，便于找到挂载目录
+        loadDir('/app');
     }
 
     // 提交创建标注项目

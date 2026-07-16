@@ -38,6 +38,7 @@ services:
       - ./app/static:/app/app/static
       - ./logs:/app/logs
       - ./models:/app/models
+      - ./datasets_import:/app/datasets_import
     restart: always
     gpus: all
 

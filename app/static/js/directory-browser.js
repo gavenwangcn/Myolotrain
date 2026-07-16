@@ -314,11 +314,29 @@ class DirectoryBrowser {
         modalBody.insertBefore(alertDiv, modalBody.firstChild);
     }
 
-    // 公共方法：显示目录选择器
+    // 公共方法：显示目录选择器（支持叠在已有 modal 之上）
     show(callback) {
         this.onSelectCallback = callback;
         this.selectedPath = '';
+        const modalEl = document.getElementById('directoryBrowserModal');
+        if (!modalEl) {
+            console.error('directoryBrowserModal 不存在');
+            alert('目录浏览器未初始化，请刷新页面');
+            return;
+        }
+        // Bootstrap 不支持嵌套 modal：提高 z-index，避免被「创建标注项目」挡住
+        const openCount = document.querySelectorAll('.modal.show').length;
+        modalEl.style.zIndex = String(1060 + openCount * 20);
+        document.body.appendChild(modalEl);
         this.modal.show();
+        const onShown = () => {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            if (backdrops.length > 0) {
+                backdrops[backdrops.length - 1].style.zIndex = String(1055 + openCount * 20);
+            }
+            modalEl.removeEventListener('shown.bs.modal', onShown);
+        };
+        modalEl.addEventListener('shown.bs.modal', onShown);
     }
 }
 
