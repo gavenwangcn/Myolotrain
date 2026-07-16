@@ -225,6 +225,14 @@ class TrainingManager {
         const template = document.getElementById('add-training-template');
         modalBody.innerHTML = template.innerHTML;
 
+        // 重置共享确定按钮（避免被其它页面留在「处理中...」/禁用状态）
+        if (modalSubmit) {
+            modalSubmit.disabled = false;
+            modalSubmit.style.display = 'inline-block';
+            modalSubmit.textContent = '确定';
+            modalSubmit.onclick = () => this.submitAddTraining();
+        }
+
         // 加载数据集和模型选项
         this.loadDatasetOptions();
         this.loadModelOptions();
@@ -643,7 +651,9 @@ class TrainingManager {
         }
 
         // 绑定提交按钮事件
-        modalSubmit.onclick = () => this.submitAddTraining();
+        if (modalSubmit) {
+            modalSubmit.onclick = () => this.submitAddTraining();
+        }
     }
 
     // 加载数据集选项
@@ -844,13 +854,21 @@ class TrainingManager {
         // 创建请求数据
         const data = {
             name: nameInput.value,
-            model_id: modelSelect.value || null,
             parameters: parameters,
-            hardware_config: hardwareConfig
+            hardware_config: hardwareConfig,
+            dataset_id: datasetId
         };
 
-        // 添加数据集ID
-        data.dataset_id = datasetId;
+        // 仅在选择了模型时传 model_id（避免传 null 导致后端校验异常）
+        if (modelSelect.value) {
+            data.model_id = modelSelect.value;
+        }
+
+        const modalSubmit = document.getElementById('modalSubmit');
+        if (modalSubmit) {
+            modalSubmit.disabled = true;
+            modalSubmit.textContent = '创建中...';
+        }
 
         // 发送请求
         authenticatedFetch(`${API_URL}/training/`, {
@@ -864,17 +882,28 @@ class TrainingManager {
             if (response.ok) {
                 return response.json();
             } else {
-                return response.json().then(data => {
-                    throw new Error(data.detail || '创建训练任务失败');
+                return response.json().then(errData => {
+                    const detail = errData.detail;
+                    const msg = typeof detail === 'string' ? detail : (JSON.stringify(detail) || '创建训练任务失败');
+                    throw new Error(msg);
                 });
             }
         })
         .then(result => {
+            if (modalSubmit) {
+                modalSubmit.disabled = false;
+                modalSubmit.textContent = '确定';
+            }
             modal.hide();
             this.loadTrainingTasks();
+            alert('训练任务创建成功，请在列表中点击「开始训练」');
         })
         .catch(error => {
             console.error('Error creating training task:', error);
+            if (modalSubmit) {
+                modalSubmit.disabled = false;
+                modalSubmit.textContent = '确定';
+            }
             alert('创建训练任务失败: ' + error.message);
         });
     }
