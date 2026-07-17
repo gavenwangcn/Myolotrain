@@ -1,6 +1,6 @@
 # Docker部署指南
 
-本文档提供使用Docker部署YOLOv8训练平台的详细步骤。
+本文档提供使用 Docker 部署 YOLO 训练平台的详细步骤（支持 YOLOv8 / YOLO11 / YOLOv13）。
 
 ## 系统要求
 

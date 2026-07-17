@@ -799,10 +799,17 @@ def upload_model_to_management(
         from app.crud import model as model_crud
         
         # 准备模型数据
+        output_model_type = parameters.get("model_type", "yolov8n")
+        if task.model_id:
+            from app.crud import model as model_crud_lookup
+            source_model = model_crud_lookup.get(db, id=task.model_id)
+            if source_model and source_model.type:
+                output_model_type = source_model.type
+
         model_data = ModelCreate(
             name=model_name,
             description=f"由训练任务 '{task.name}' 生成的{ '最佳' if model_type == 'best' else '最后' }模型",
-            type="yolov8",  # 默认模型类型
+            type=output_model_type,
             task="detect",  # 默认任务类型
             path=model_file_path,
             source="training"

@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsm6 \
     libxext6 \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录

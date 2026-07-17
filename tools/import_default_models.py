@@ -36,15 +36,23 @@ def get_model_type(filename: str) -> str:
     elif "yolo8x" in filename_lower:
         return "yolov8x"
     elif "yolo11n" in filename_lower:
-        return "yolov11n"
+        return "yolo11n"
     elif "yolo11s" in filename_lower:
-        return "yolov11s"
+        return "yolo11s"
     elif "yolo11m" in filename_lower:
-        return "yolov11m"
+        return "yolo11m"
     elif "yolo11l" in filename_lower:
-        return "yolov11l"
+        return "yolo11l"
     elif "yolo11x" in filename_lower:
-        return "yolov11x"
+        return "yolo11x"
+    elif "yolov13n" in filename_lower or "yolo13n" in filename_lower:
+        return "yolov13n"
+    elif "yolov13s" in filename_lower or "yolo13s" in filename_lower:
+        return "yolov13s"
+    elif "yolov13l" in filename_lower or "yolo13l" in filename_lower:
+        return "yolov13l"
+    elif "yolov13x" in filename_lower or "yolo13x" in filename_lower:
+        return "yolov13x"
     else:
         # 默认返回检测模型
         return "yolov8n"

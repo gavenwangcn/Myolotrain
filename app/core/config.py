@@ -52,10 +52,11 @@ class Settings(BaseSettings):
     TENSORBOARD_LOGS_DIR: Path = BASE_DIR / "logs" / "tensorboard"
     TENSORBOARD_PORT: int = 6006
 
-    # YOLO Settings (支持YOLOv8和YOLO11)
+    # YOLO Settings (支持YOLOv8、YOLO11、YOLOv13)
     YOLO_MODEL_TYPES: List[str] = [
         "yolov8n", "yolov8s", "yolov8m", "yolov8l", "yolov8x",
-        "yolo11n", "yolo11s", "yolo11m", "yolo11l", "yolo11x"
+        "yolo11n", "yolo11s", "yolo11m", "yolo11l", "yolo11x",
+        "yolov13n", "yolov13s", "yolov13l", "yolov13x",
     ]
     YOLO_TASK_TYPES: List[str] = ["detect", "segment", "classify", "pose"]
 

@@ -1849,6 +1849,12 @@
                         <option value="yolo11l">YOLO11l</option>
                         <option value="yolo11x">YOLO11x</option>
                     </optgroup>
+                    <optgroup label="YOLOv13">
+                        <option value="yolov13n">YOLOv13n</option>
+                        <option value="yolov13s">YOLOv13s</option>
+                        <option value="yolov13l">YOLOv13l</option>
+                        <option value="yolov13x">YOLOv13x</option>
+                    </optgroup>
                 </select>
             </div>
             <div class="mb-3">
@@ -1904,6 +1910,32 @@
                     <option value="">无 (从头开始训练)</option>
                     <!-- 模型选项将通过JavaScript动态加载 -->
                 </select>
+            </div>
+            <div class="mb-3" id="training-base-model-container">
+                <label for="training-base-model" class="form-label">基础模型架构</label>
+                <select class="form-select" id="training-base-model">
+                    <optgroup label="YOLOv8">
+                        <option value="yolov8n" selected>YOLOv8n</option>
+                        <option value="yolov8s">YOLOv8s</option>
+                        <option value="yolov8m">YOLOv8m</option>
+                        <option value="yolov8l">YOLOv8l</option>
+                        <option value="yolov8x">YOLOv8x</option>
+                    </optgroup>
+                    <optgroup label="YOLO11">
+                        <option value="yolo11n">YOLO11n</option>
+                        <option value="yolo11s">YOLO11s</option>
+                        <option value="yolo11m">YOLO11m</option>
+                        <option value="yolo11l">YOLO11l</option>
+                        <option value="yolo11x">YOLO11x</option>
+                    </optgroup>
+                    <optgroup label="YOLOv13">
+                        <option value="yolov13n">YOLOv13n</option>
+                        <option value="yolov13s">YOLOv13s</option>
+                        <option value="yolov13l">YOLOv13l</option>
+                        <option value="yolov13x">YOLOv13x</option>
+                    </optgroup>
+                </select>
+                <div class="form-text">未选择预训练模型时，将自动下载对应架构的预训练权重</div>
             </div>
             <div class="mb-3">
                 <label for="training-epochs" class="form-label">训练轮数</label>

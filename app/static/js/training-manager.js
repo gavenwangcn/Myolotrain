@@ -236,6 +236,7 @@ class TrainingManager {
         // 加载数据集和模型选项
         this.loadDatasetOptions();
         this.loadModelOptions();
+        this.bindTrainingBaseModelToggle();
 
         // 显示模态框
         modal.show();
@@ -721,6 +722,22 @@ class TrainingManager {
             });
     }
 
+    // 切换基础模型架构选择器显示
+    bindTrainingBaseModelToggle() {
+        const modelSelect = document.getElementById('training-model');
+        const baseModelContainer = document.getElementById('training-base-model-container');
+        if (!modelSelect || !baseModelContainer) {
+            return;
+        }
+
+        const updateVisibility = () => {
+            baseModelContainer.style.display = modelSelect.value ? 'none' : 'block';
+        };
+
+        modelSelect.addEventListener('change', updateVisibility);
+        updateVisibility();
+    }
+
     // 加载模型选项
     loadModelOptions() {
         authenticatedFetch(`${API_URL}/models/`)
@@ -838,6 +855,11 @@ class TrainingManager {
             batch_size: parseInt(batchSizeInput.value),
             lr0: parseFloat(lrInput.value)
         };
+
+        const baseModelSelect = document.getElementById('training-base-model');
+        if (!modelSelect.value && baseModelSelect) {
+            parameters.model_type = baseModelSelect.value;
+        }
 
         // 根据矩形训练模式设置图像大小
         if (enableRectTraining) {

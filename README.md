@@ -104,9 +104,9 @@ Myolotrain是一个可视化管理yolo视觉模型训练的系统，为计算机
 </details>
 
 ### 注意事项 :exclamation:  :exclamation:  :exclamation: ：
- **（20250418）目前暂不支持yolov5，支持yolov8以上** 
+ **（20250418）目前暂不支持yolov5，支持yolov8、yolo11、yolov13** 
 
- **（20250418）在根目录有yolov8n、yolov11n两个预训练模型，datasets_import下有测试数据集，供测试使用** 
+ **（20250418）在根目录有yolov8n、yolov11n预训练模型，datasets_import下有测试数据集，供测试使用；YOLOv13 权重可通过训练时自动下载或手动放入 models/ 目录** 
 
 **须手动安装torch环境（华为昇腾NPU环境请参考更新日志）**
 

@@ -661,6 +661,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
 
     # Get model if provided
     weights_path = ""
+    db_model = None
     if db_task.model_id:
         db_model = model.get(db, id=db_task.model_id)
         if not db_model:
@@ -679,6 +680,8 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
 
     # 准备训练参数
     model_type = db_task.parameters.get("model_type", "yolov8n")
+    if db_model and db_model.type:
+        model_type = db_model.type
     epochs = db_task.parameters.get("epochs", 10)
     batch_size = db_task.parameters.get("batch_size", 16)
     img_size = db_task.parameters.get("img_size", 640)
@@ -734,7 +737,10 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
     # 设置训练参数
     epochs = db_task.parameters.get("epochs", 10)
     batch_size = db_task.parameters.get("batch_size", 16)
-    model_type = db_task.parameters.get("model_type", "yolov8n")
+    if db_model and db_model.type:
+        model_type = db_model.type
+    else:
+        model_type = db_task.parameters.get("model_type", "yolov8n")
 
     # 处理图像大小参数
     img_size = db_task.parameters.get("img_size", 640)
@@ -761,15 +767,15 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
         if weights_path:
             print(f"\n=== 警告: 用户指定的模型文件不存在: {weights_path}, 将使用默认模型 ===")
 
-        # 检查模型类型，支持YOLOv8和YOLO11
-        if model_type.startswith("yolo11"):
-            # YOLO11模型类型，直接使用
-            model_type_full = model_type
-        elif model_type.startswith("yolov8"):
-            # YOLOv8模型类型，直接使用
+        # 检查模型类型，支持 YOLOv8 / YOLO11 / YOLOv13
+        if (
+            model_type.startswith("yolo11")
+            or model_type.startswith("yolov8")
+            or model_type.startswith("yolov13")
+        ):
             model_type_full = model_type
         else:
-            # 其他情况，尝试添加yolov8前缀（向后兼容）
+            # 其他情况，尝试添加 yolov8 前缀（向后兼容）
             model_type_full = f"yolov8{model_type}"
 
         model_file = models_dir / f"{model_type_full}.pt"

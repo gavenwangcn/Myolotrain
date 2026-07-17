@@ -105,9 +105,9 @@ SQLALCHEMY_DATABASE_URI = "postgresql://postgres:postgres@localhost:5432/yolov8_
    - 彩色标注不同区域
    - 显示详细信息表格
 
-3. **YOLO11 模型支持**
-   - 支持 YOLOv8 和 YOLO11 模型
-   - 模型上传和训练
+3. **YOLO 模型支持**
+   - 支持 YOLOv8、YOLO11、YOLOv13 模型
+   - 模型上传、训练与推理（模型测试）
 
 ## 常见问题
 
