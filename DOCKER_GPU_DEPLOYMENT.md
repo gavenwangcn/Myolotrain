@@ -124,11 +124,14 @@ docker build -f Dockerfile.gpu -t myolotrain-gpu .
 1. 使用 Python 3.12 + PyTorch CUDA wheel 基础环境
 2. 配置国内 APT 和 PyPI 镜像源加速下载
 3. 安装 git 及系统依赖（用于从 GitHub 安装 YOLOv13 fork）
-4. 通过 requirements.txt 安装 Python 依赖（含 iMoonLab/yolov13 ultralytics fork，支持 YOLOv8/11/13）
-5. 复制应用代码到容器
-6. 创建必要的目录结构
+4. 安装 **Flash Attention 2.8.3**（匹配 PyTorch 2.6 + CUDA 12 + Python 3.12，构建时自动验证 import）
+5. 通过 requirements.txt 安装 Python 依赖（含 iMoonLab/yolov13 ultralytics fork，支持 YOLOv8/11/13）
+6. 复制应用代码到容器
+7. 创建必要的目录结构
 
 > **YOLOv13 说明**：镜像内置 [iMoonLab/yolov13](https://github.com/iMoonLab/yolov13) 分支版 ultralytics。首次训练 YOLOv13 时会自动从 GitHub Releases 下载预训练权重（如 `yolov13n.pt`）。模型测试、检测、导出 ONNX 等推理功能与 YOLOv8/11 用法相同。
+
+> **Flash Attention 说明**：GPU 镜像在构建阶段预装 `flash-attn`，部署环境要求 **Ampere 及以上 GPU**（如 RTX 30/40、A100）。YOLOv13 训练时会自动启用 Flash Attention；YOLOv8/11 不使用该模块，功能不受影响。
 
 ## Docker Compose部署
 

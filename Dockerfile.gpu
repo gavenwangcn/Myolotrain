@@ -33,6 +33,37 @@ RUN pip install --no-cache-dir \
     torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
     --index-url https://download.pytorch.org/whl/cu126
 
+# Flash Attention（YOLOv13 HyperACE 加速；按 PyTorch CXX11 ABI 自动匹配 wheel）
+RUN pip install --no-cache-dir packaging ninja && \
+    python - <<'PY'
+import subprocess
+import sys
+
+import torch
+
+base = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.6cxx11abi"
+suffix = "-cp312-cp312-linux_x86_64.whl"
+preferred = "TRUE" if torch._C._GLIBCXX_USE_CXX11_ABI else "FALSE"
+fallback = "FALSE" if preferred == "TRUE" else "TRUE"
+errors = []
+
+for abi in (preferred, fallback):
+    wheel = f"{base}{abi}{suffix}"
+    print(f"Trying flash-attn wheel (cxx11abi={abi}): {wheel}")
+    try:
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--no-cache-dir", wheel, "--no-build-isolation"]
+        )
+        from flash_attn.flash_attn_interface import flash_attn_func
+
+        print(f"flash-attn installed and verified (cxx11abi={abi})")
+        break
+    except (subprocess.CalledProcessError, ImportError) as exc:
+        errors.append(f"{abi}: {exc}")
+else:
+    raise RuntimeError("flash-attn installation failed:\n" + "\n".join(errors))
+PY
+
 ENV PIP_DEFAULT_TIMEOUT=300
 
 # 其余依赖 + GPU 版 onnxruntime
