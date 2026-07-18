@@ -1110,6 +1110,41 @@
                                         流媒体
                                     </label>
                                 </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="video-source" id="source-display" value="display">
+                                    <label class="form-check-label" for="source-display">
+                                        屏幕/窗口
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="mb-3" id="display-options" style="display: none;">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">屏幕/窗口采集</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="alert alert-info mb-3">
+                                            <small>
+                                                点击「开始检测」后，浏览器会弹出系统选择器，请选择要共享的<strong>整个屏幕</strong>或<strong>应用窗口</strong>。
+                                                左侧「原始视频」区域会实时预览采集画面，用于确认是否获取到真实视频流。
+                                                游戏建议使用<strong>窗口模式</strong>或<strong>无边框窗口</strong>；独占全屏可能导致黑屏。
+                                            </small>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label for="display-max-dimension" class="form-label">送检最大边长: <span id="display-max-dimension-value">1280</span> px</label>
+                                                <input type="range" class="form-range" id="display-max-dimension" min="640" max="1920" step="64" value="1280">
+                                                <div class="form-text">缩小后再送检，降低延迟与带宽占用</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="display-target-fps" class="form-label">送检帧率: <span id="display-target-fps-value">5</span> FPS</label>
+                                                <input type="range" class="form-range" id="display-target-fps" min="1" max="15" step="1" value="5">
+                                                <div class="form-text">限制每秒送检次数，避免打满后端</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mb-3" id="webcam-options">
@@ -2471,7 +2506,7 @@
     <script src="static/js/opencv-tools.js"></script>
     <script src="static/js/video-processor.js?v=20241219"></script>
     <script src="static/js/online-annotation.js?v=20260716"></script>
-    <script src="static/js/detection-manager.js"></script>
+    <script src="static/js/detection-manager.js?v=20260719"></script>
     <script src="static/js/settings-manager.js"></script>
     <script src="static/js/monitoring.js"></script>
     <script src="static/js/export-models.js"></script>

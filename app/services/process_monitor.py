@@ -90,20 +90,29 @@ class ProcessMonitor:
             time.sleep(30)
 
     def _is_process_running(self, pid):
-        """检查进程是否在运行"""
+        """检查进程是否在运行（僵尸进程视为已结束）"""
         try:
             if os.name == 'nt':  # Windows
                 # 使用tasklist命令检查进程
                 output = subprocess.check_output(f'tasklist /FI "PID eq {pid}"', shell=True).decode()
                 return str(pid) in output
             else:  # Unix/Linux
-                # 使用ps命令检查进程
                 try:
                     os.kill(pid, 0)
-                    return True
                 except OSError:
                     return False
-        except:
+                # 僵尸进程对 signal 0 仍“存活”，但训练已结束，需按未运行处理
+                try:
+                    stat = subprocess.check_output(
+                        ['ps', '-p', str(pid), '-o', 'stat='],
+                        stderr=subprocess.DEVNULL,
+                    ).decode().strip()
+                    if not stat or 'Z' in stat:
+                        return False
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    return False
+                return True
+        except Exception:
             return False
 
     def _analyze_training_log(self, task_id):

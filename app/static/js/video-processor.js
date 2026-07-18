@@ -20,6 +20,16 @@ class VideoProcessor {
         
         // 轨迹记录和预测相关变量
         this.trajectoryEnabled = false;
+
+        // 屏幕/窗口采集
+        this.detectionSourceType = null;
+        this.detectionOptions = {};
+        this.captureCanvas = null;
+        this.syncDetectInFlight = false;
+        this.lastDetectRequestTime = 0;
+        this.detectionFailureCount = 0;
+        this.displayBlackScreenTimer = null;
+        this.displayPreviewStartedAt = 0;
         
         // 添加页面关闭事件监听器
         this.addPageUnloadListener();
@@ -1105,36 +1115,57 @@ class VideoProcessor {
         const sourceWebcam = document.getElementById('source-webcam');
         const sourceFile = document.getElementById('source-file');
         const sourceStream = document.getElementById('source-stream');
+        const sourceDisplay = document.getElementById('source-display');
         const webcamOptions = document.getElementById('webcam-options');
         const videoFileOptions = document.getElementById('video-file-options');
         const streamOptions = document.getElementById('stream-options');
+        const displayOptions = document.getElementById('display-options');
+
+        const displayMaxDimension = document.getElementById('display-max-dimension');
+        const displayMaxDimensionValue = document.getElementById('display-max-dimension-value');
+        const displayTargetFps = document.getElementById('display-target-fps');
+        const displayTargetFpsValue = document.getElementById('display-target-fps-value');
+
+        if (displayMaxDimension && displayMaxDimensionValue) {
+            displayMaxDimension.addEventListener('input', function() {
+                displayMaxDimensionValue.textContent = this.value;
+            });
+        }
+        if (displayTargetFps && displayTargetFpsValue) {
+            displayTargetFps.addEventListener('input', function() {
+                displayTargetFpsValue.textContent = this.value;
+            });
+        }
+
+        if (sourceDisplay && !this.isDisplayCaptureSupported()) {
+            sourceDisplay.disabled = true;
+            const displayLabel = document.querySelector('label[for="source-display"]');
+            if (displayLabel) {
+                displayLabel.title = '当前浏览器不支持屏幕/窗口采集，请使用 Chrome 或 Edge';
+            }
+        }
+
+        const updateVideoSourcePanels = () => {
+            const selected = document.querySelector('input[name="video-source"]:checked');
+            const value = selected ? selected.value : 'webcam';
+            if (webcamOptions) webcamOptions.style.display = value === 'webcam' ? 'block' : 'none';
+            if (videoFileOptions) videoFileOptions.style.display = value === 'file' ? 'block' : 'none';
+            if (streamOptions) streamOptions.style.display = value === 'stream' ? 'block' : 'none';
+            if (displayOptions) displayOptions.style.display = value === 'display' ? 'block' : 'none';
+        };
 
         if (sourceWebcam && sourceFile && sourceStream && webcamOptions && videoFileOptions && streamOptions) {
-            sourceWebcam.addEventListener('change', function() {
-                if (this.checked) {
-                    webcamOptions.style.display = 'block';
-                    videoFileOptions.style.display = 'none';
-                    streamOptions.style.display = 'none';
-                }
+            [sourceWebcam, sourceFile, sourceStream, sourceDisplay].filter(Boolean).forEach(radio => {
+                radio.addEventListener('change', updateVideoSourcePanels);
             });
-
-            sourceFile.addEventListener('change', function() {
-                if (this.checked) {
-                    webcamOptions.style.display = 'none';
-                    videoFileOptions.style.display = 'block';
-                    streamOptions.style.display = 'none';
-                }
-            });
-
-            sourceStream.addEventListener('change', function() {
-                if (this.checked) {
-                    webcamOptions.style.display = 'none';
-                    videoFileOptions.style.display = 'none';
-                    streamOptions.style.display = 'block';
-                    // 加载流媒体列表
-                    window.videoProcessor.loadStreamsList();
-                }
-            });
+            if (sourceStream) {
+                sourceStream.addEventListener('change', function() {
+                    if (this.checked && window.videoProcessor) {
+                        window.videoProcessor.loadStreamsList();
+                    }
+                });
+            }
+            updateVideoSourcePanels();
         }
 
         // 实时检测阈值滑块事件
@@ -1407,7 +1438,11 @@ class VideoProcessor {
                     // 直接使用流媒体的单帧API进行检测
                     this.startStreamDetection(modelId, streamId);
                     return;
-                    
+
+                } else if (videoSource === 'display') {
+                    this.startDisplayCapture(modelId, videoElement, detectionCanvas);
+                    return;
+
                 } else if (videoSource === 'webcam') {
                     let webcamId = webcamSelect.value;
 
@@ -2049,8 +2084,207 @@ class VideoProcessor {
         this.animationFrameId = requestAnimationFrame(detectStreamFrame);
     }
 
+    isDisplayCaptureSupported() {
+        return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+    }
+
+    clearDisplayBlackScreenTimer() {
+        if (this.displayBlackScreenTimer) {
+            clearTimeout(this.displayBlackScreenTimer);
+            this.displayBlackScreenTimer = null;
+        }
+    }
+
+    scheduleDisplayBlackScreenCheck(videoElement) {
+        this.clearDisplayBlackScreenTimer();
+        this.displayPreviewStartedAt = Date.now();
+        this.displayBlackScreenTimer = setTimeout(() => {
+            if (!this.isDetecting || this.detectionSourceType !== 'display') return;
+            const w = videoElement.videoWidth;
+            const h = videoElement.videoHeight;
+            if (!w || !h) {
+                document.getElementById('detection-status').innerHTML =
+                    `<span class="badge bg-danger">预览无画面：请改窗口模式或选择整个屏幕</span>`;
+                return;
+            }
+            try {
+                const probe = document.createElement('canvas');
+                probe.width = Math.min(w, 64);
+                probe.height = Math.min(h, 64);
+                const pctx = probe.getContext('2d');
+                pctx.drawImage(videoElement, 0, 0, probe.width, probe.height);
+                const pixels = pctx.getImageData(0, 0, probe.width, probe.height).data;
+                let sum = 0;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    sum += pixels[i] + pixels[i + 1] + pixels[i + 2];
+                }
+                if (sum === 0) {
+                    document.getElementById('detection-status').innerHTML =
+                        `<span class="badge bg-danger">预览黑屏：请改窗口/无边框模式，或选择整个显示器</span>`;
+                }
+            } catch (e) {
+                console.warn('黑屏检测跳过（跨域限制）:', e);
+            }
+        }, 2500);
+    }
+
+    setupVideoDetectionCanvas(videoElement, detectionCanvas, modelId, detectionOptions = {}) {
+        detectionCanvas.width = videoElement.videoWidth;
+        detectionCanvas.height = videoElement.videoHeight;
+
+        if (window.alertZone) {
+            window.alertZone.resizeAlertZone(detectionCanvas.width, detectionCanvas.height);
+            window.alertZone.drawAlertZone();
+        }
+
+        if (window.trajectory) {
+            const settings = window.trajectory.getSettings();
+            const enableTrajectory = document.getElementById('enable-trajectory');
+            if (enableTrajectory) {
+                enableTrajectory.checked = settings.enabled;
+                this.trajectoryEnabled = settings.enabled;
+                const trajectorySettings = document.getElementById('trajectory-settings');
+                if (trajectorySettings) {
+                    trajectorySettings.style.display = settings.enabled ? 'block' : 'none';
+                }
+            }
+        }
+
+        this.startRealTimeDetection(modelId, detectionOptions);
+    }
+
+    startDisplayCapture(modelId, videoElement, detectionCanvas) {
+        if (!this.isDisplayCaptureSupported()) {
+            alert('当前浏览器不支持屏幕/窗口采集，请使用 Chrome 或 Edge，并通过 localhost 访问。');
+            return;
+        }
+
+        const maxDimension = parseInt(document.getElementById('display-max-dimension')?.value || '1280', 10);
+        const targetFps = parseInt(document.getElementById('display-target-fps')?.value || '5', 10);
+
+        navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+            .then(mediaStream => {
+                this.stream = mediaStream;
+                this.detectionSourceType = 'display';
+
+                mediaStream.getVideoTracks().forEach(track => {
+                    track.onended = () => {
+                        if (this.isDetecting) {
+                            alert('屏幕共享已结束');
+                            this.stopRealTimeDetection();
+                        }
+                    };
+                });
+
+                videoElement.srcObject = mediaStream;
+                videoElement.style.display = 'block';
+                videoElement.muted = true;
+                videoElement.playsInline = true;
+
+                return videoElement.play().then(() => {
+                    document.getElementById('detection-status').innerHTML =
+                        `<span class="badge bg-info">屏幕预览中，正在启动检测...</span>`;
+                    this.scheduleDisplayBlackScreenCheck(videoElement);
+
+                    if (videoElement.readyState >= 1 && videoElement.videoWidth) {
+                        this.setupVideoDetectionCanvas(videoElement, detectionCanvas, modelId, {
+                            useSyncDetect: true,
+                            targetFps,
+                            maxDimension
+                        });
+                        return;
+                    }
+
+                    videoElement.onloadedmetadata = () => {
+                        this.setupVideoDetectionCanvas(videoElement, detectionCanvas, modelId, {
+                            useSyncDetect: true,
+                            targetFps,
+                            maxDimension
+                        });
+                    };
+                });
+            })
+            .catch(error => {
+                console.error('屏幕/窗口采集失败:', error);
+                let message = error.message || String(error);
+                if (error.name === 'NotAllowedError') {
+                    message = '已取消或拒绝屏幕共享，请在系统弹窗中选择要共享的窗口或屏幕';
+                } else if (error.name === 'NotFoundError') {
+                    message = '未找到可共享的屏幕或窗口';
+                }
+                alert('屏幕/窗口采集失败: ' + message);
+                document.getElementById('detection-status').innerHTML =
+                    `<span class="badge bg-danger">${message}</span>`;
+            });
+    }
+
+    scaleDetectionsForCanvas(detections, sourceWidth, sourceHeight, canvasWidth, canvasHeight) {
+        if (!sourceWidth || !sourceHeight) return detections;
+        const scaleX = canvasWidth / sourceWidth;
+        const scaleY = canvasHeight / sourceHeight;
+        return detections.map(det => {
+            if (!Array.isArray(det.bbox) || det.bbox.length < 4) return det;
+            const [x1, y1, x2, y2] = det.bbox;
+            return {
+                ...det,
+                bbox: [x1 * scaleX, y1 * scaleY, x2 * scaleX, y2 * scaleY]
+            };
+        });
+    }
+
+    processDetectionResults(ctx, detections) {
+        this.detectedObjects = detections.length;
+        document.getElementById('objects-counter').textContent = this.detectedObjects;
+
+        if (this.trajectoryEnabled && window.trajectory) {
+            const trackedObjects = window.trajectory.trackObjects(detections);
+            window.trajectory.updateTrajectories(trackedObjects);
+            this.drawDetections(ctx, trackedObjects);
+            window.trajectory.drawTrajectories(ctx);
+            this.updateDetectionTable(trackedObjects);
+            this.checkTargetObjects(trackedObjects);
+        } else {
+            this.drawDetections(ctx, detections);
+            this.updateDetectionTable(detections);
+            this.checkTargetObjects(detections);
+        }
+
+        document.getElementById('detection-status').innerHTML =
+            `<span class="badge bg-success">正在检测</span>`;
+        this.detectionFailureCount = 0;
+    }
+
+    captureFrameForDetection(videoElement, maxDimension) {
+        if (!this.captureCanvas) {
+            this.captureCanvas = document.createElement('canvas');
+        }
+        let sw = videoElement.videoWidth;
+        let sh = videoElement.videoHeight;
+        if (!sw || !sh) {
+            return Promise.reject(new Error('视频尚未就绪'));
+        }
+        if (maxDimension && Math.max(sw, sh) > maxDimension) {
+            const scale = maxDimension / Math.max(sw, sh);
+            sw = Math.round(sw * scale);
+            sh = Math.round(sh * scale);
+        }
+        this.captureCanvas.width = sw;
+        this.captureCanvas.height = sh;
+        const captureCtx = this.captureCanvas.getContext('2d');
+        captureCtx.drawImage(videoElement, 0, 0, sw, sh);
+        return new Promise((resolve, reject) => {
+            this.captureCanvas.toBlob(blob => {
+                if (!blob) {
+                    reject(new Error('无法捕获当前帧'));
+                    return;
+                }
+                resolve({ blob, sourceWidth: sw, sourceHeight: sh });
+            }, 'image/jpeg', 0.85);
+        });
+    }
+
     // 开始实时检测
-    startRealTimeDetection(modelId) {
+    startRealTimeDetection(modelId, options = {}) {
         this.isDetecting = true;
         document.getElementById('start-detection-btn').style.display = 'none';
         document.getElementById('stop-detection-btn').style.display = 'inline-block';
@@ -2062,6 +2296,15 @@ class VideoProcessor {
         // 获取阈值
         const confThreshold = parseFloat(document.getElementById('rt-conf-threshold').value);
         const iouThreshold = parseFloat(document.getElementById('rt-iou-threshold').value);
+
+        this.detectionOptions = {
+            useSyncDetect: !!options.useSyncDetect,
+            targetFps: options.targetFps || null,
+            maxDimension: options.maxDimension || null,
+        };
+        this.syncDetectInFlight = false;
+        this.lastDetectRequestTime = 0;
+        this.detectionFailureCount = 0;
 
         // 定义检测函数
         const detectFrame = (timestamp) => {
@@ -2075,9 +2318,75 @@ class VideoProcessor {
             this.lastFrameTime = timestamp;
 
             // 绘制当前帧
-            const ctx = document.getElementById('detection-canvas').getContext('2d');
+            const canvas = document.getElementById('detection-canvas');
+            const ctx = canvas.getContext('2d');
             const videoElement = document.getElementById('video-element');
-            ctx.drawImage(videoElement, 0, 0, document.getElementById('detection-canvas').width, document.getElementById('detection-canvas').height);
+            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+            const opts = this.detectionOptions || {};
+            if (opts.useSyncDetect) {
+                const minInterval = opts.targetFps ? 1000 / opts.targetFps : 0;
+                const now = performance.now();
+                if (this.syncDetectInFlight || (minInterval && (now - this.lastDetectRequestTime) < minInterval)) {
+                    if (this.isDetecting) {
+                        this.animationFrameId = requestAnimationFrame(detectFrame);
+                    }
+                    return;
+                }
+                this.lastDetectRequestTime = now;
+                this.syncDetectInFlight = true;
+
+                this.captureFrameForDetection(videoElement, opts.maxDimension)
+                    .then(({ blob, sourceWidth, sourceHeight }) => {
+                        const imageFile = new File([blob], `frame_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                        const formData = new FormData();
+                        formData.append('file', imageFile);
+                        formData.append('model_id', modelId);
+                        formData.append('conf_thres', confThreshold);
+                        formData.append('iou_thres', iouThreshold);
+
+                        return authenticatedFetch(`${API_URL}/sync-detection/sync-detect`, {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                return response.text().then(text => {
+                                    throw new Error(text || '同步检测失败');
+                                });
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            let detections = data.detections || [];
+                            detections = this.scaleDetectionsForCanvas(
+                                detections,
+                                sourceWidth,
+                                sourceHeight,
+                                canvas.width,
+                                canvas.height
+                            );
+                            this.processDetectionResults(ctx, detections);
+                        });
+                    })
+                    .catch(error => {
+                        console.error('同步检测失败:', error);
+                        this.detectionFailureCount += 1;
+                        document.getElementById('detection-status').innerHTML =
+                            `<span class="badge bg-danger">检测错误: ${error.message}</span>`;
+                        if (this.detectionFailureCount >= 10) {
+                            alert('连续检测失败次数过多，已停止检测');
+                            this.stopRealTimeDetection();
+                        }
+                    })
+                    .finally(() => {
+                        this.syncDetectInFlight = false;
+                        if (this.isDetecting) {
+                            this.animationFrameId = requestAnimationFrame(detectFrame);
+                        }
+                    });
+                return;
+            }
 
             // 获取当前帧数据
             ctx.canvas.toBlob((blob) => {
@@ -2341,6 +2650,11 @@ class VideoProcessor {
     // 停止实时检测
     stopRealTimeDetection() {
         this.isDetecting = false;
+        this.detectionSourceType = null;
+        this.detectionOptions = {};
+        this.syncDetectInFlight = false;
+        this.detectionFailureCount = 0;
+        this.clearDisplayBlackScreenTimer();
 
         // 更新检测状态
         document.getElementById('detection-status').innerHTML =

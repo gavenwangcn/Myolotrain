@@ -33,6 +33,7 @@ services:
       POSTGRES_DB: yolov8_platform
       NVIDIA_VISIBLE_DEVICES: all
       UVICORN_RELOAD: "false"
+      UVICORN_ACCESS_LOG: "false"
       DEBUG: "false"
     volumes:
       - ./app/static:/app/app/static

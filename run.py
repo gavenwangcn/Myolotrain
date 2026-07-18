@@ -1,14 +1,11 @@
 import logging
 import os
 import uvicorn
+from app.core.logging_config import configure_app_logging, get_uvicorn_log_config
 from app.db.init_db import init_db
 # from app.services.tensorboard_service import tensorboard_manager
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+configure_app_logging()
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
@@ -28,6 +25,12 @@ if __name__ == "__main__":
         # Start server
         logger.info("Starting server...")
         reload = os.getenv("UVICORN_RELOAD", "true").lower() == "true"
-        uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=reload)
+        uvicorn.run(
+            "app.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=reload,
+            **get_uvicorn_log_config(),
+        )
     except Exception as e:
         logger.error(f"Error during startup: {e}", exc_info=True)

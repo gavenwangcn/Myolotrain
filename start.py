@@ -1,9 +1,14 @@
 import os
 import sys
 import subprocess
+import logging
 import uvicorn
 from pathlib import Path
+from app.core.logging_config import configure_app_logging, get_uvicorn_log_config
 from app.db.init_db import init_db
+
+configure_app_logging()
+logger = logging.getLogger(__name__)
 
 # 导入主初始化数据库函数
 sys.path.append(str(Path(__file__).resolve().parent))
@@ -21,8 +26,14 @@ def start_app():
         init_db()
         
         # 启动应用程序
-        print("启动Web服务器...")
-        uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+        logger.info("启动Web服务器...")
+        uvicorn.run(
+            "app.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=True,
+            **get_uvicorn_log_config(),
+        )
     else:
         print("数据库初始化失败，无法启动应用程序。")
         sys.exit(1)

@@ -9,6 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 
 from app.api.api import api_router
 from app.core.config import settings
+from app.core.logging_config import configure_app_logging
 from app.services.process_monitor import process_monitor
 from app.services.tensorboard_service import tensorboard_manager
 from app.services.upload_service import start_cleanup
@@ -20,11 +21,7 @@ from app.patches.numpy_compat import apply_patch as apply_numpy_compat_patch
 from app.db.session import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
-logging_level = logging.DEBUG if settings.DEBUG else logging.INFO
-logging.basicConfig(
-    level=logging_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+configure_app_logging()
 logger = logging.getLogger(__name__)
 logger.info(f"应用启动模式: {'DEBUG' if settings.DEBUG else 'PRODUCTION'}")
 
@@ -194,12 +191,12 @@ app.include_router(api_router, prefix="/api")
 # 添加直接访问 CSS 和 JS 文件的路由
 @app.get("/css/{file_path:path}", include_in_schema=False)
 async def get_css(file_path: str):
-    logger.info(f"Accessing CSS file: {file_path}")
+    logger.debug("Accessing CSS file: %s", file_path)
     return RedirectResponse(url=f"/static/css/{file_path}")
 
 @app.get("/js/{file_path:path}", include_in_schema=False)
 async def get_js(file_path: str):
-    logger.info(f"Accessing JS file: {file_path}")
+    logger.debug("Accessing JS file: %s", file_path)
     return RedirectResponse(url=f"/static/js/{file_path}")
 
 @app.get("/", response_class=HTMLResponse)

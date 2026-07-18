@@ -57,7 +57,7 @@ class DetectionManager {
     }
 
     // 提交检测请求
-    submitDetection() {
+    async submitDetection() {
         const modelSelect = document.getElementById('model-select');
         const fileInput = document.getElementById('detection-file');
         const confThreshold = document.getElementById('conf-threshold');
@@ -70,96 +70,101 @@ class DetectionManager {
             return;
         }
 
-        // 显示加载中
         resultContainer.style.display = 'block';
         resultContentContainer.innerHTML = '<div class="text-center my-5"><div class="spinner-border text-primary" role="status"></div><p class="mt-3">正在处理，请稍候...</p></div>';
 
-        // 创建FormData对象
         const formData = new FormData();
         formData.append('model_id', modelSelect.value);
         formData.append('file', fileInput.files[0]);
         formData.append('conf_thres', confThreshold.value);
         formData.append('iou_thres', iouThreshold.value);
 
-        // 发送请求
-        authenticatedFetch(`${API_URL}/detection`, {
-            method: 'POST',
-            body: formData
-        })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    throw new Error('检测失败');
+        const parseErrorResponse = async (response, fallbackMessage) => {
+            const text = await response.text();
+            try {
+                const json = JSON.parse(text);
+                if (typeof json.detail === 'string') {
+                    return json.detail;
                 }
-            })
-            .then(result => {
-                // 获取检测结果
-                return authenticatedFetch(`${API_URL}/detection/${result.id}/result`);
-            })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    throw new Error('获取检测结果失败');
+                if (Array.isArray(json.detail)) {
+                    return json.detail.map(item => item.msg || JSON.stringify(item)).join('; ');
                 }
-            })
-            .then(resultData => {
-                // 显示检测结果
-                console.log('Detection result:', resultData);
+                return json.message || text || fallbackMessage;
+            } catch (e) {
+                return text || fallbackMessage;
+            }
+        };
 
-                if (resultData.status !== 'completed' || !resultData.results || resultData.results.length === 0) {
-                    resultContentContainer.innerHTML = `<div class="alert alert-warning">${resultData.message || '未找到检测结果'}</div>`;
-                    return;
-                }
+        try {
+            const response = await authenticatedFetch(`${API_URL}/detection/`, {
+                method: 'POST',
+                body: formData
+            });
 
-                // 构建结果显示
-                let resultHtml = '';
+            if (!response.ok) {
+                const detail = await parseErrorResponse(response, '检测失败');
+                throw new Error(detail);
+            }
 
-                resultData.results.forEach(result => {
-                    // 添加检测图像
-                    resultHtml += `<div class="card mb-4">
-                        <div class="card-header">检测到 ${result.count} 个目标</div>
-                        <div class="card-body">
-                            <div class="text-center mb-3">
-                                <img src="${result.image_url}" alt="检测结果" class="img-fluid">
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>类别</th>
-                                            <th>置信度</th>
-                                            <th>位置</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>`;
+            const result = await response.json();
+            const resultResponse = await authenticatedFetch(`${API_URL}/detection/${result.id}/result`);
 
-                    // 添加检测结果表格
-                    result.detections.forEach(detection => {
-                        const confidence = (detection.confidence * 100).toFixed(2);
-                        const bbox = detection.bbox.map(v => Math.round(v)).join(', ');
+            if (!resultResponse.ok) {
+                const detail = await parseErrorResponse(resultResponse, '获取检测结果失败');
+                throw new Error(detail);
+            }
 
-                        resultHtml += `<tr>
-                            <td>${detection.class_name}</td>
-                            <td>${confidence}%</td>
-                            <td>[${bbox}]</td>
-                        </tr>`;
-                    });
+            const resultData = await resultResponse.json();
+            console.log('Detection result:', resultData);
 
-                    resultHtml += `</tbody>
-                                </table>
-                            </div>
+            if (resultData.status !== 'completed' || !resultData.results || resultData.results.length === 0) {
+                resultContentContainer.innerHTML = `<div class="alert alert-warning">${resultData.message || '未找到检测结果'}</div>`;
+                return;
+            }
+
+            let resultHtml = '';
+
+            resultData.results.forEach(result => {
+                resultHtml += `<div class="card mb-4">
+                    <div class="card-header">检测到 ${result.count} 个目标</div>
+                    <div class="card-body">
+                        <div class="text-center mb-3">
+                            <img src="${result.image_url}" alt="检测结果" class="img-fluid">
                         </div>
-                    </div>`;
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>类别</th>
+                                        <th>置信度</th>
+                                        <th>位置</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+
+                result.detections.forEach(detection => {
+                    const confidence = (detection.confidence * 100).toFixed(2);
+                    const bbox = detection.bbox.map(v => Math.round(v)).join(', ');
+
+                    resultHtml += `<tr>
+                        <td>${detection.class_name}</td>
+                        <td>${confidence}%</td>
+                        <td>[${bbox}]</td>
+                    </tr>`;
                 });
 
-                resultContentContainer.innerHTML = resultHtml;
-            })
-            .catch(error => {
-                console.error('Error in detection:', error);
-                resultContentContainer.innerHTML = `<div class="alert alert-danger">检测失败: ${error.message}</div>`;
+                resultHtml += `</tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
             });
+
+            resultContentContainer.innerHTML = resultHtml;
+        } catch (error) {
+            console.error('Error in detection:', error);
+            resultContentContainer.innerHTML = `<div class="alert alert-danger">检测失败: ${error.message}</div>`;
+        }
     }
 }
 

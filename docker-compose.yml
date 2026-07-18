@@ -34,6 +34,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=yolov8_platform
+      - UVICORN_ACCESS_LOG=false
     volumes:
       - ./app/static:/app/app/static
       - ./logs:/app/logs

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.crud import training_task, dataset, model
+from app.db.session import SessionLocal
 from app.models.training_task import TrainingTask
 from app.schemas.training_task import TrainingTaskCreate, TrainingTaskUpdate
 from app.services.ascend_service import AscendDeviceManager
@@ -952,37 +953,33 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
 
         # 启动一个线程来监控训练进程的状态
         def monitor_training_process():
+            monitor_db = SessionLocal()
             try:
-                # 等待训练进程结束
                 training_process.wait()
-                
-                # 训练完成后，更新任务状态
-                db_task_updated = training_task.get(db, id=task_id)
+                db_task_updated = training_task.get(monitor_db, id=task_id)
                 if db_task_updated:
-                    # 检查训练是否成功完成
                     if training_process.returncode == 0:
-                        # 训练成功，更新状态为已完成
-                        training_task.update(db, db_obj=db_task_updated, obj_in={
+                        training_task.update(monitor_db, db_obj=db_task_updated, obj_in={
                             "status": "completed",
                             "end_time": datetime.now()
                         })
                         print(f"\n=== 训练任务 {task_id} 已成功完成 ===")
                     else:
-                        # 训练失败，更新状态为失败
-                        training_task.update(db, db_obj=db_task_updated, obj_in={
+                        training_task.update(monitor_db, db_obj=db_task_updated, obj_in={
                             "status": "failed",
                             "end_time": datetime.now()
                         })
                         print(f"\n=== 训练任务 {task_id} 失败 ===")
             except Exception as e:
                 print(f"\n=== 监控训练进程时出错: {e} ===")
-                # 更新任务状态为失败
-                db_task_updated = training_task.get(db, id=task_id)
+                db_task_updated = training_task.get(monitor_db, id=task_id)
                 if db_task_updated:
-                    training_task.update(db, db_obj=db_task_updated, obj_in={
+                    training_task.update(monitor_db, db_obj=db_task_updated, obj_in={
                         "status": "failed",
                         "end_time": datetime.now()
                     })
+            finally:
+                monitor_db.close()
 
         # 启动监控线程
         monitor_thread = threading.Thread(target=monitor_training_process)

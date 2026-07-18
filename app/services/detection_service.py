@@ -1,5 +1,7 @@
 import os
 import uuid
+import logging
+import traceback
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -10,6 +12,8 @@ from app.core.config import settings
 from app.crud import detection_task, model
 from app.models.detection_task import DetectionTask
 from app.schemas.detection_task import DetectionTaskCreate, DetectionTaskUpdate
+
+logger = logging.getLogger(__name__)
 
 async def create_detection_task(
     db: Session,
@@ -59,15 +63,19 @@ async def create_detection_task(
     # 在实际实现中，这将由后台任务处理
     # 现在，我们将执行实际的检测过程
     try:
-        # 导入YOLO模型
         from ultralytics import YOLO
 
-        # 加载模型
         model_path = db_model.path
+        logger.info("Detection task %s: loading model %s for file %s", task_id, model_path, input_path)
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+
         yolo_model = YOLO(model_path)
 
-        # 执行检测
-        results = yolo_model(str(input_path), conf=parameters.get('conf_thres', 0.25), iou=parameters.get('iou_thres', 0.45))
+        conf = parameters.get('conf_thres', 0.25)
+        iou = parameters.get('iou_thres', 0.45)
+        logger.info("Detection task %s: running inference conf=%s iou=%s", task_id, conf, iou)
+        results = yolo_model(str(input_path), conf=conf, iou=iou)
 
         # 保存结果
         for i, result in enumerate(results):
@@ -95,15 +103,18 @@ async def create_detection_task(
         db_task = detection_task.update(db, db_obj=db_task, obj_in={
             "status": "completed"
         })
+        logger.info("Detection task %s: completed successfully", task_id)
     except Exception as e:
-        # 如果发生错误，更新任务状态为失败
+        error_msg = f"{type(e).__name__}: {e}"
+        logger.error("Detection task %s failed: %s", task_id, error_msg)
+        logger.error(traceback.format_exc())
         db_task = detection_task.update(db, db_obj=db_task, obj_in={
             "status": "failed",
-            "parameters": {**parameters, "error": str(e)}
+            "parameters": {**parameters, "error": error_msg}
         })
         raise HTTPException(
             status_code=500,
-            detail=f"Detection failed: {str(e)}",
+            detail=f"Detection failed: {error_msg}",
         )
 
     return db_task
