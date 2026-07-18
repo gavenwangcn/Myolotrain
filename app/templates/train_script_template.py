@@ -95,6 +95,7 @@ def main():
         batch_size = {}
         img_size = {}
         rect = {}
+        amp = {}
         output_dir = r'{}'
         model_file = r'{}'
 
@@ -108,6 +109,7 @@ def main():
         print('训练轮数: ' + str(epochs))
         print('批量大小: ' + str(batch_size))
         print('图像大小: ' + str(img_size))
+        print('AMP混合精度: ' + str(amp))
         print('输出目录: ' + str(output_dir))
         print('模型文件: ' + str(model_file))
 
@@ -178,7 +180,7 @@ def main():
         model = YOLO(model_file)
 
         # 开始训练
-        print('\n=== 开始训练数据集配置文件=' + str(dataset_yaml) + ', 轮数=' + str(epochs) + ', 批量=' + str(batch_size) + ', 图像大小=' + str(img_size) + ', 矩形训练=' + str(rect) + ' ===')
+        print('\n=== 开始训练数据集配置文件=' + str(dataset_yaml) + ', 轮数=' + str(epochs) + ', 批量=' + str(batch_size) + ', 图像大小=' + str(img_size) + ', 矩形训练=' + str(rect) + ', AMP=' + str(amp) + ' ===')
 
 
 
@@ -192,7 +194,7 @@ def main():
             'name': 'exp',
             'exist_ok': True,
             'workers': 0,  # 禁用多进程数据加载，避免多进程问题
-            'amp': False   # 禁用自动混合精度，避免下载额外模型
+            'amp': amp     # 由界面配置，默认 False
         }}
 
         # 启用 TensorBoard（Ultralytics 8.3.111+ 默认关闭，必须显式打开）

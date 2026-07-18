@@ -848,12 +848,14 @@ class TrainingManager {
 
         // 获取矩形训练模式设置
         const enableRectTraining = document.getElementById('enable-rect-training').checked;
+        const enableAmp = document.getElementById('enable-amp-training')?.checked === true;
 
         // 创建训练参数对象
         const parameters = {
             epochs: parseInt(epochsInput.value),
             batch_size: parseInt(batchSizeInput.value),
-            lr0: parseFloat(lrInput.value)
+            lr0: parseFloat(lrInput.value),
+            amp: enableAmp  // 默认 false（未勾选）
         };
 
         const baseModelSelect = document.getElementById('training-base-model');

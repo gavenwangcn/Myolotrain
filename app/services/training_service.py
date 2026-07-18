@@ -747,6 +747,8 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
 
     # 检查是否启用矩形训练
     rect_training = db_task.parameters.get("rect", False)
+    # AMP 混合精度，默认关闭（与界面默认一致）
+    amp_enabled = bool(db_task.parameters.get("amp", False))
 
     # 获取硬件配置
     hardware_config = db_task.hardware_config or {}
@@ -869,6 +871,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
         batch_size,
         img_size,
         rect_training,
+        amp_enabled,
         output_dir_abs,
         model_file_abs
     )
@@ -1192,6 +1195,7 @@ def resume_training(db: Session, task_id: str) -> TrainingTask:
 
     # 检查是否启用矩形训练
     rect_training = db_task.parameters.get("rect", False)
+    amp_enabled = bool(db_task.parameters.get("amp", False))
 
     # 获取硬件配置
     hardware_config = db_task.hardware_config or {}
@@ -1232,7 +1236,7 @@ def resume_training(db: Session, task_id: str) -> TrainingTask:
         'name': 'exp',
         'exist_ok': True,
         'workers': 0,  # 禁用多进程数据加载，避免多进程问题
-        'amp': False,  # 禁用自动混合精度，避免下载额外模型
+        'amp': amp_enabled,
         'resume': True  # 启用恢复训练
     }
 

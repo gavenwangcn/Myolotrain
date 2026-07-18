@@ -1946,6 +1946,15 @@
                 <input type="number" class="form-control" id="training-batch-size" value="16" min="1" required>
             </div>
             <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="enable-amp-training">
+                    <label class="form-check-label" for="enable-amp-training">
+                        启用 AMP 混合精度训练
+                    </label>
+                </div>
+                <div class="form-text">默认关闭。开启后可节省显存并加速训练，对精度影响通常很小。</div>
+            </div>
+            <div class="mb-3">
                 <label class="form-label">图像大小设置</label>
                 <div class="card">
                     <div class="card-body">
