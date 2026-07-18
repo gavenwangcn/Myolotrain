@@ -1285,6 +1285,9 @@ def resume_training(db: Session, task_id: str) -> TrainingTask:
     python_code = f"""
 import os
 import sys
+import numpy as np
+if not hasattr(np, 'trapz') and hasattr(np, 'trapezoid'):
+    np.trapz = np.trapezoid
 from ultralytics import YOLO
 
 # 设置环境变量

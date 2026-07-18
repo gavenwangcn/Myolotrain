@@ -28,14 +28,49 @@ RUN mkdir -p /root/.pip && \
 
 COPY requirements.txt .
 
-# PyTorch GPU 2.6.0 + CUDA 12.6（与 README 开发环境一致，避免拉取最新超大包）
-RUN pip install --no-cache-dir \
-    torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
-    --index-url https://download.pytorch.org/whl/cu126
+# PyTorch GPU 2.6.0 + CUDA 12.6（官方源 SSL 不稳时自动回退镜像）
+ENV PIP_DEFAULT_TIMEOUT=300
+RUN python - <<'PY'
+import subprocess
+import sys
 
-# Flash Attention（YOLOv13 HyperACE 加速；按 PyTorch CXX11 ABI 自动匹配 wheel）
+pkgs = ["torch==2.6.0", "torchvision==0.21.0", "torchaudio==2.6.0"]
+indexes = [
+    # 优先国内镜像，规避 download.pytorch.org SSL 中断
+    "https://mirrors.aliyun.com/pytorch-wheels/cu126",
+    "https://mirror.sjtu.edu.cn/pytorch-wheels/cu126",
+    "https://download.pytorch.org/whl/cu126",
+]
+errors = []
+
+for index in indexes:
+    print(f"=== Trying PyTorch index: {index} ===")
+    cmd = [
+        sys.executable, "-m", "pip", "install", "--no-cache-dir",
+        "--retries", "8", "--timeout", "300",
+        "--trusted-host", "download.pytorch.org",
+        "--trusted-host", "mirrors.aliyun.com",
+        "--trusted-host", "mirror.sjtu.edu.cn",
+        "--index-url", index,
+        *pkgs,
+    ]
+    try:
+        subprocess.check_call(cmd)
+        import torch
+        print(f"PyTorch OK: {torch.__version__} from {index}")
+        break
+    except Exception as exc:
+        errors.append(f"{index}: {exc}")
+        print(f"FAILED: {index} -> {exc}")
+else:
+    raise RuntimeError("PyTorch install failed from all indexes:\n" + "\n".join(errors))
+PY
+
+# Flash Attention（YOLOv13 HyperACE 必需；需可访问 GitHub Releases）
+# 构建机通常无 GPU，不做 CUDA 符号导入校验，只确保 wheel 安装成功
 RUN pip install --no-cache-dir packaging ninja && \
     python - <<'PY'
+import importlib.metadata
 import subprocess
 import sys
 
@@ -52,19 +87,32 @@ for abi in (preferred, fallback):
     print(f"Trying flash-attn wheel (cxx11abi={abi}): {wheel}")
     try:
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--no-cache-dir", wheel, "--no-build-isolation"]
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "--retries",
+                "5",
+                "--timeout",
+                "300",
+                wheel,
+                "--no-build-isolation",
+            ]
         )
-        from flash_attn.flash_attn_interface import flash_attn_func
-
-        print(f"flash-attn installed and verified (cxx11abi={abi})")
+        version = importlib.metadata.version("flash_attn")
+        print(f"flash-attn installed OK: version={version}, cxx11abi={abi}")
         break
-    except (subprocess.CalledProcessError, ImportError) as exc:
+    except (subprocess.CalledProcessError, importlib.metadata.PackageNotFoundError) as exc:
         errors.append(f"{abi}: {exc}")
 else:
-    raise RuntimeError("flash-attn installation failed:\n" + "\n".join(errors))
+    raise RuntimeError(
+        "flash-attn REQUIRED for YOLOv13 failed to install.\n"
+        "Ensure build host can reach GitHub Releases.\n"
+        + "\n".join(errors)
+    )
 PY
-
-ENV PIP_DEFAULT_TIMEOUT=300
 
 # 其余依赖 + GPU 版 onnxruntime
 RUN pip install --no-cache-dir --retries 5 --timeout 300 \

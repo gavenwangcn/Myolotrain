@@ -14,6 +14,7 @@ from app.services.tensorboard_service import tensorboard_manager
 from app.services.upload_service import start_cleanup
 from app.services.monitoring_service import system_monitor
 from app.patches.torch_load_patch import apply_patch
+from app.patches.numpy_compat import apply_patch as apply_numpy_compat_patch
 
 # 导入认证相关模块
 from app.db.session import get_db
@@ -52,6 +53,8 @@ async def startup_event():
         # 应用PyTorch加载补丁，确保使用weights_only=False
         apply_patch()
         logger.info("Applied PyTorch load patch: weights_only=False by default")
+        apply_numpy_compat_patch()
+        logger.info("Applied NumPy compat patch for np.trapz")
 
         # 检查数据库连接
         from app.db.session import engine

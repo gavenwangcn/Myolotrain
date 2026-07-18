@@ -33,6 +33,12 @@ import matplotlib
 
 def main():
     try:
+        # NumPy 2.x 移除了 np.trapz，YOLOv13 ultralytics 验证指标仍会调用
+        import numpy as np
+        if not hasattr(np, 'trapz') and hasattr(np, 'trapezoid'):
+            np.trapz = np.trapezoid
+            print('\n=== 已应用 NumPy 兼容补丁: np.trapz -> np.trapezoid ===')
+
         import torch
         original_torch_load = torch.load
         def patched_torch_load(*args, **kwargs):

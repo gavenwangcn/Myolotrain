@@ -12,7 +12,8 @@
 # YOLO and dependencies
 # iMoonLab YOLOv13 fork（含 ultralytics，支持 YOLOv8/11/13 训练与推理）
 ultralytics @ git+https://github.com/iMoonLab/yolov13.git
-numpy>=1.26.0   #仅有1.26.0以上支持python3.12
+huggingface_hub>=0.23.0  # yolov13/ultralytics Model 基类依赖
+numpy>=1.26.0  # NumPy 2.x 移除 np.trapz；由 app.patches.numpy_compat 做别名
 opencv-python>=4.8.0
 PyYAML>=5.3.1
 tqdm>=4.41.0
