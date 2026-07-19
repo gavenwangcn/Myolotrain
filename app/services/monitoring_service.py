@@ -7,7 +7,7 @@ import time
 import threading
 import json
 import os
-from datetime import datetime
+from app.core.time_utils import shanghai_now, to_shanghai_iso
 from typing import Dict, List
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
@@ -143,7 +143,7 @@ class SystemMonitor:
                 pass
             
             return {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": to_shanghai_iso(shanghai_now()),
                 "cpu": {
                     "percent": cpu_percent,
                     "count": cpu_count

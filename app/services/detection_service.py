@@ -15,6 +15,114 @@ from app.schemas.detection_task import DetectionTaskCreate, DetectionTaskUpdate
 
 logger = logging.getLogger(__name__)
 
+VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv', '.m4v'}
+
+
+def _is_video_file(path: Path) -> bool:
+    return path.suffix.lower() in VIDEO_EXTENSIONS
+
+
+def _boxes_to_detections(result) -> List[Dict[str, Any]]:
+    detections = []
+    boxes = result.boxes
+    if boxes is None:
+        return detections
+    for box in boxes:
+        detections.append({
+            'class': int(box.cls.item()),
+            'class_name': result.names[int(box.cls.item())],
+            'confidence': float(box.conf.item()),
+            'bbox': box.xyxy.tolist()[0],
+        })
+    return detections
+
+
+def _save_image_results(results, output_dir: Path) -> None:
+    import json
+    for i, result in enumerate(results):
+        result_path = output_dir / f"result_{i}.jpg"
+        result.save(filename=str(result_path))
+        json_path = output_dir / f"result_{i}.json"
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(_boxes_to_detections(result), f, indent=2)
+
+
+def _run_video_detection(
+    yolo_model,
+    input_path: Path,
+    output_dir: Path,
+    conf: float,
+    iou: float,
+    task_id: str,
+) -> Dict[str, Any]:
+    import json
+
+    logger.info(
+        "Detection task %s: video file %s, starting frame-by-frame inference",
+        task_id, input_path.name,
+    )
+
+    frame_count = 0
+    total_detections = 0
+    sample_frames: List[Dict[str, Any]] = []
+
+    results = yolo_model.predict(
+        source=str(input_path),
+        conf=conf,
+        iou=iou,
+        stream=True,
+        save=True,
+        project=str(output_dir),
+        name="annotated",
+        exist_ok=True,
+        verbose=False,
+    )
+
+    for result in results:
+        frame_count += 1
+        detections = _boxes_to_detections(result)
+        total_detections += len(detections)
+
+        if frame_count == 1 or frame_count % 100 == 0:
+            logger.info(
+                "Detection task %s: video progress %d frames processed, current frame objects=%d",
+                task_id, frame_count, len(detections),
+            )
+
+        if frame_count == 1 or frame_count % 500 == 0:
+            sample_frames.append({
+                "frame_index": frame_count,
+                "detections": detections,
+                "count": len(detections),
+            })
+
+    annotated_videos = [
+        p for p in output_dir.rglob("*")
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS and p.name != input_path.name
+    ]
+    annotated_videos.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+    video_url = None
+    if annotated_videos:
+        video_rel_path = annotated_videos[0].relative_to(settings.STATIC_DIR)
+        video_url = f"/static/{video_rel_path.as_posix()}"
+
+    summary = {
+        "media_type": "video",
+        "frame_count": frame_count,
+        "total_detections": total_detections,
+        "sample_frames": sample_frames[:20],
+        "video_url": video_url,
+    }
+    with open(output_dir / "video_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    logger.info(
+        "Detection task %s: video completed, frames=%d, total_objects=%d, output=%s",
+        task_id, frame_count, total_detections, video_url or "none",
+    )
+    return summary
+
 async def create_detection_task(
     db: Session,
     model_id: str,
@@ -74,34 +182,29 @@ async def create_detection_task(
 
         conf = parameters.get('conf_thres', 0.25)
         iou = parameters.get('iou_thres', 0.45)
-        logger.info("Detection task %s: running inference conf=%s iou=%s", task_id, conf, iou)
-        results = yolo_model(str(input_path), conf=conf, iou=iou)
+        is_video = _is_video_file(input_path)
+        media_type = 'video' if is_video else 'image'
+        logger.info(
+            "Detection task %s: running inference media=%s conf=%s iou=%s",
+            task_id, media_type, conf, iou,
+        )
 
-        # 保存结果
-        for i, result in enumerate(results):
-            # 保存带有检测框的图像
-            result_path = output_dir / f"result_{i}.jpg"
-            result.save(filename=str(result_path))
+        if is_video:
+            summary = _run_video_detection(yolo_model, input_path, output_dir, conf, iou, task_id)
+            updated_parameters = {
+                **parameters,
+                "media_type": "video",
+                "frame_count": summary["frame_count"],
+                "total_detections": summary["total_detections"],
+            }
+        else:
+            results = yolo_model(str(input_path), conf=conf, iou=iou, verbose=False)
+            _save_image_results(results, output_dir)
+            updated_parameters = {**parameters, "media_type": "image"}
 
-            # 保存JSON结果
-            json_path = output_dir / f"result_{i}.json"
-            with open(json_path, 'w') as f:
-                import json
-                # 将检测结果转换为JSON格式
-                boxes = result.boxes
-                json_results = []
-                for box in boxes:
-                    json_results.append({
-                        'class': int(box.cls.item()),
-                        'class_name': result.names[int(box.cls.item())],
-                        'confidence': float(box.conf.item()),
-                        'bbox': box.xyxy.tolist()[0],
-                    })
-                json.dump(json_results, f, indent=2)
-
-        # 更新任务状态为已完成
         db_task = detection_task.update(db, db_obj=db_task, obj_in={
-            "status": "completed"
+            "status": "completed",
+            "parameters": updated_parameters,
         })
         logger.info("Detection task %s: completed successfully", task_id)
     except Exception as e:
@@ -166,7 +269,30 @@ def get_detection_result(db: Session, task_id: str) -> Dict[str, Any]:
             "results": None
         }
 
-    # 查找结果文件
+    # 视频结果
+    summary_path = output_dir / "video_summary.json"
+    if summary_path.exists():
+        import json
+        with open(summary_path, 'r', encoding='utf-8') as f:
+            summary = json.load(f)
+
+        results = [{
+            "media_type": "video",
+            "video_url": summary.get("video_url"),
+            "frame_count": summary.get("frame_count", 0),
+            "total_detections": summary.get("total_detections", 0),
+            "sample_frames": summary.get("sample_frames", []),
+            "count": summary.get("total_detections", 0),
+        }]
+        return {
+            "status": "completed",
+            "message": f"Video detection completed: {summary.get('frame_count', 0)} frames processed",
+            "results": results,
+            "input_image": str(Path(db_task.input_path).name),
+            "media_type": "video",
+        }
+
+    # 图片结果
     result_images = list(output_dir.glob("result_*.jpg"))
     result_jsons = list(output_dir.glob("result_*.json"))
 

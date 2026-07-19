@@ -1154,8 +1154,9 @@ class VideoProcessor {
             if (displayOptions) displayOptions.style.display = value === 'display' ? 'block' : 'none';
         };
 
-        if (sourceWebcam && sourceFile && sourceStream && webcamOptions && videoFileOptions && streamOptions) {
-            [sourceWebcam, sourceFile, sourceStream, sourceDisplay].filter(Boolean).forEach(radio => {
+        const sourceRadios = [sourceWebcam, sourceFile, sourceStream, sourceDisplay].filter(Boolean);
+        if (sourceRadios.length > 0) {
+            sourceRadios.forEach(radio => {
                 radio.addEventListener('change', updateVideoSourcePanels);
             });
             if (sourceStream) {
@@ -1166,6 +1167,16 @@ class VideoProcessor {
                 });
             }
             updateVideoSourcePanels();
+        }
+
+        const pickDisplaySourceBtn = document.getElementById('pick-display-source-btn');
+        if (pickDisplaySourceBtn) {
+            pickDisplaySourceBtn.addEventListener('click', () => {
+                const videoElement = document.getElementById('video-element');
+                if (videoElement) {
+                    this.pickDisplaySourceForPreview(videoElement);
+                }
+            });
         }
 
         // 实时检测阈值滑块事件
@@ -2099,7 +2110,7 @@ class VideoProcessor {
         this.clearDisplayBlackScreenTimer();
         this.displayPreviewStartedAt = Date.now();
         this.displayBlackScreenTimer = setTimeout(() => {
-            if (!this.isDetecting || this.detectionSourceType !== 'display') return;
+            if (this.detectionSourceType !== 'display') return;
             const w = videoElement.videoWidth;
             const h = videoElement.videoHeight;
             if (!w || !h) {
@@ -2153,6 +2164,81 @@ class VideoProcessor {
         this.startRealTimeDetection(modelId, detectionOptions);
     }
 
+    releaseDisplayStream() {
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+            this.stream = null;
+        }
+        this.detectionSourceType = null;
+        this.clearDisplayBlackScreenTimer();
+    }
+
+    updateDisplaySourceLabel(mediaStream) {
+        const labelEl = document.getElementById('display-source-label');
+        if (!labelEl) return;
+        const track = mediaStream?.getVideoTracks?.()[0];
+        if (!track) {
+            labelEl.textContent = '尚未选择共享源';
+            return;
+        }
+        labelEl.textContent = track.label ? `已选择: ${track.label}` : '已选择共享源';
+    }
+
+    pickDisplaySourceForPreview(videoElement) {
+        if (!this.isDisplayCaptureSupported()) {
+            alert('当前浏览器不支持屏幕/窗口采集，请使用 Chrome 或 Edge，并通过 localhost 访问。');
+            return;
+        }
+
+        this.releaseDisplayStream();
+
+        navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+            .then(mediaStream => {
+                this.stream = mediaStream;
+                this.detectionSourceType = 'display';
+                this.updateDisplaySourceLabel(mediaStream);
+
+                mediaStream.getVideoTracks().forEach(track => {
+                    track.onended = () => {
+                        this.updateDisplaySourceLabel(null);
+                        if (this.isDetecting) {
+                            alert('屏幕共享已结束');
+                            this.stopRealTimeDetection();
+                        } else {
+                            this.releaseDisplayStream();
+                            if (videoElement) {
+                                videoElement.srcObject = null;
+                            }
+                        }
+                    };
+                });
+
+                videoElement.srcObject = mediaStream;
+                videoElement.style.display = 'block';
+                videoElement.muted = true;
+                videoElement.playsInline = true;
+
+                return videoElement.play();
+            })
+            .then(() => {
+                document.getElementById('detection-status').innerHTML =
+                    '<span class="badge bg-success">已选择共享源，可点击「开始检测」</span>';
+                this.scheduleDisplayBlackScreenCheck(videoElement);
+            })
+            .catch(error => {
+                console.error('屏幕/窗口选择失败:', error);
+                let message = error.message || String(error);
+                if (error.name === 'NotAllowedError') {
+                    message = '已取消或拒绝屏幕共享，请在系统弹窗中选择要共享的窗口或屏幕';
+                } else if (error.name === 'NotFoundError') {
+                    message = '未找到可共享的屏幕或窗口';
+                }
+                alert('屏幕/窗口选择失败: ' + message);
+                document.getElementById('detection-status').innerHTML =
+                    `<span class="badge bg-danger">${message}</span>`;
+            });
+    }
+
     startDisplayCapture(modelId, videoElement, detectionCanvas) {
         if (!this.isDisplayCaptureSupported()) {
             alert('当前浏览器不支持屏幕/窗口采集，请使用 Chrome 或 Edge，并通过 localhost 访问。');
@@ -2161,6 +2247,39 @@ class VideoProcessor {
 
         const maxDimension = parseInt(document.getElementById('display-max-dimension')?.value || '1280', 10);
         const targetFps = parseInt(document.getElementById('display-target-fps')?.value || '5', 10);
+        const detectionOptions = {
+            useSyncDetect: true,
+            targetFps,
+            maxDimension
+        };
+
+        const beginDetection = () => {
+            document.getElementById('detection-status').innerHTML =
+                '<span class="badge bg-info">屏幕预览中，正在启动检测...</span>';
+            this.scheduleDisplayBlackScreenCheck(videoElement);
+
+            if (videoElement.readyState >= 1 && videoElement.videoWidth) {
+                this.setupVideoDetectionCanvas(videoElement, detectionCanvas, modelId, detectionOptions);
+                return;
+            }
+
+            videoElement.onloadedmetadata = () => {
+                this.setupVideoDetectionCanvas(videoElement, detectionCanvas, modelId, detectionOptions);
+            };
+        };
+
+        const existingTrack = this.stream?.getVideoTracks?.()[0];
+        if (this.detectionSourceType === 'display' && existingTrack && existingTrack.readyState === 'live') {
+            this.updateDisplaySourceLabel(this.stream);
+            videoElement.srcObject = this.stream;
+            videoElement.style.display = 'block';
+            videoElement.muted = true;
+            videoElement.playsInline = true;
+            videoElement.play().then(beginDetection).catch(error => {
+                alert('屏幕预览失败: ' + error.message);
+            });
+            return;
+        }
 
         navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
             .then(mediaStream => {
@@ -2622,18 +2741,29 @@ class VideoProcessor {
             tableBody.innerHTML = '<tr><td colspan="3" class="text-center">暂无检测结果</td></tr>';
             return;
         }
+
+        const formatBBox = (detection) => {
+            if (Array.isArray(detection.bbox) && detection.bbox.length >= 4) {
+                const [x1, y1, x2, y2] = detection.bbox;
+                return `[${Math.round(x1)}, ${Math.round(y1)}, ${Math.round(x2)}, ${Math.round(y2)}]（像素，相对检测画布左上角）`;
+            }
+            if (detection.bbox && typeof detection.bbox === 'object') {
+                const { x, y, width, height } = detection.bbox;
+                return `(${Math.round(x)}, ${Math.round(y)}, ${Math.round(width)}, ${Math.round(height)})`;
+            }
+            return '-';
+        };
         
         let html = '';
         detections.forEach(detection => {
-            const { class_name, confidence, bbox } = detection;
-            const [x, y, width, height] = bbox;
-            const position = `(${Math.round(x)}, ${Math.round(y)}, ${Math.round(width)}, ${Math.round(height)})`;
+            const className = detection.class_name || detection.class || 'Unknown';
+            const confidence = detection.confidence ?? 0;
             
             html += `
                 <tr>
-                    <td>${class_name}</td>
+                    <td>${className}</td>
                     <td>${(confidence * 100).toFixed(1)}%</td>
-                    <td>${position}</td>
+                    <td><small>${formatBBox(detection)}</small></td>
                 </tr>
             `;
         });

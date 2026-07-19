@@ -1,5 +1,7 @@
 FROM python:3.12-slim
 
+ENV TZ=Asia/Shanghai
+
 # 配置apt使用国内镜像源
 RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
 RUN sed -i 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
@@ -12,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     git \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # 设置工作目录

@@ -510,6 +510,14 @@ function loadPage(page) {
         stopTrainingTasksAutoRefresh();
     }
     
+    // 清理模型测试页面的窗口流检测
+    if (currentPage === 'detection' && typeof window.detectionManager !== 'undefined') {
+        if (window.detectionManager.isStreamDetecting) {
+            window.detectionManager.stopStreamDetection();
+        }
+        window.detectionManager.releaseDisplayStream();
+    }
+
     // 清理视频检测页面的资源
     if (currentPage === 'video' && typeof window.videoProcessor !== 'undefined') {
         // 停止任何正在进行的检测

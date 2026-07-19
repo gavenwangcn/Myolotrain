@@ -5,6 +5,17 @@ class TrainingManager {
         this.trainingTasksRefreshInterval = null;
     }
 
+    // 将 API 返回的时间格式化为上海时区
+    formatDateTime(value) {
+        if (!value) return '-';
+        const text = String(value);
+        const normalized = /[zZ]|[+-]\d{2}:\d{2}$/.test(text) ? text : `${text}+08:00`;
+        return new Date(normalized).toLocaleString('zh-CN', {
+            hour12: false,
+            timeZone: 'Asia/Shanghai',
+        });
+    }
+
     // 获取状态文本
     getStatusText(status) {
         switch (status) {
@@ -89,8 +100,8 @@ class TrainingManager {
                         <td>${task.dataset_id}</td>
                         <td>${task.model_id || '-'}</td>
                         <td><span class="badge ${this.getStatusBadgeClass(task.status)}">${this.getStatusText(task.status)}</span></td>
-                        <td>${task.start_time ? new Date(task.start_time).toLocaleString() : '-'}</td>
-                        <td>${task.end_time ? new Date(task.end_time).toLocaleString() : '-'}</td>
+                        <td>${this.formatDateTime(task.start_time)}</td>
+                        <td>${this.formatDateTime(task.end_time)}</td>
                         <td>
                             ${task.status === 'pending' ? `<button class="btn btn-sm btn-success start-training" data-id="${task.id}">开始训练</button>` : ''}
                             ${task.status === 'running' || task.status === 'training' || task.status === 'downloading_model' || task.status === 'pending' ? `<button class="btn btn-sm btn-warning stop-training" data-id="${task.id}">停止训练</button>` : ''}
@@ -1774,11 +1785,11 @@ class TrainingManager {
                                 </tr>
                                 <tr>
                                     <th>开始时间</th>
-                                    <td>${task.start_time ? new Date(task.start_time).toLocaleString() : '-'}</td>
+                                    <td>${this.formatDateTime(task.start_time)}</td>
                                 </tr>
                                 <tr>
                                     <th>结束时间</th>
-                                    <td>${task.end_time ? new Date(task.end_time).toLocaleString() : '-'}</td>
+                                    <td>${this.formatDateTime(task.end_time)}</td>
                                 </tr>
                             </table>
                         </div>
@@ -1833,7 +1844,7 @@ class TrainingManager {
                                 if (updatedTask.end_time) {
                                     const endTimeCell = detailsContainer.querySelectorAll('td')[5]; // 第6个单元格是结束时间
                                     if (endTimeCell) {
-                                        endTimeCell.textContent = new Date(updatedTask.end_time).toLocaleString();
+                                        endTimeCell.textContent = this.formatDateTime(updatedTask.end_time);
                                     }
                                 }
 

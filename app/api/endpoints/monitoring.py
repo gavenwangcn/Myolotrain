@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 import psutil
 import time
-from datetime import datetime
+from app.core.time_utils import shanghai_now, to_shanghai_iso
 
 from app.db.session import get_db
 from app.services.monitoring_service import system_monitor
@@ -80,7 +80,7 @@ def get_system_resources():
             pass
         
         return {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": to_shanghai_iso(shanghai_now()),
             "cpu": {
                 "percent": cpu_percent,
                 "count": cpu_count

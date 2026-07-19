@@ -15,6 +15,7 @@ from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.time_utils import shanghai_now
 from app.crud import training_task, dataset, model
 from app.db.session import SessionLocal
 from app.models.training_task import TrainingTask
@@ -419,6 +420,8 @@ def train_model(
     # 开始训练
     try:
         from ultralytics import YOLO
+        from app.patches.ultralytics_amp_patch import apply_patch as apply_ultralytics_amp_patch
+        apply_ultralytics_amp_patch()
         model = YOLO(model_type)
 
         # 如果是昇腾NPU设备，需要进行特殊处理
@@ -675,7 +678,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
     # 更新任务状态
     db_task = training_task.update(db, db_obj=db_task, obj_in={
         "status": "pending",
-        "start_time": datetime.now(),
+        "start_time": shanghai_now(),
         "end_time": None
     })
 
@@ -839,7 +842,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
                 # 更新任务状态为失败
                 db_task = training_task.update(db, db_obj=db_task, obj_in={
                     "status": "failed",
-                    "end_time": datetime.now()
+                    "end_time": shanghai_now()
                 })
                 raise HTTPException(
                     status_code=500,
@@ -916,7 +919,6 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
         # 显式传递环境变量，确保子进程环境一致性
         env = os.environ.copy()
         env['ULTRALYTICS_SKIP_DOWNLOAD'] = '1'
-        env['ULTRALYTICS_SKIP_AMP_CHECK'] = '1'
         env['ULTRALYTICS_TENSORBOARD'] = '1'
         
         training_process = subprocess.Popen(
@@ -939,7 +941,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
             # 更新任务状态为失败
             db_task = training_task.update(db, db_obj=db_task, obj_in={
                 "status": "failed",
-                "end_time": datetime.now()
+                "end_time": shanghai_now()
             })
 
             raise Exception(f"训练中断 {return_code}. 错误信息: {error_message}")
@@ -961,13 +963,13 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
                     if training_process.returncode == 0:
                         training_task.update(monitor_db, db_obj=db_task_updated, obj_in={
                             "status": "completed",
-                            "end_time": datetime.now()
+                            "end_time": shanghai_now()
                         })
                         print(f"\n=== 训练任务 {task_id} 已成功完成 ===")
                     else:
                         training_task.update(monitor_db, db_obj=db_task_updated, obj_in={
                             "status": "failed",
-                            "end_time": datetime.now()
+                            "end_time": shanghai_now()
                         })
                         print(f"\n=== 训练任务 {task_id} 失败 ===")
             except Exception as e:
@@ -976,7 +978,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
                 if db_task_updated:
                     training_task.update(monitor_db, db_obj=db_task_updated, obj_in={
                         "status": "failed",
-                        "end_time": datetime.now()
+                        "end_time": shanghai_now()
                     })
             finally:
                 monitor_db.close()
@@ -991,7 +993,7 @@ def start_training(db: Session, task_id: str) -> TrainingTask:
         # 更新任务状态为失败
         db_task = training_task.update(db, db_obj=db_task, obj_in={
             "status": "failed",
-            "end_time": datetime.now()
+            "end_time": shanghai_now()
         })
 
         raise HTTPException(
@@ -1076,7 +1078,7 @@ def stop_training(db: Session, task_id: str) -> TrainingTask:
     # 更新任务状态为已取消
     update_data = {
         "status": "cancelled",
-        "end_time": datetime.now()
+        "end_time": shanghai_now()
     }
 
     # 如果有最新的检查点，更新last_checkpoint字段
@@ -1125,7 +1127,7 @@ def resume_training(db: Session, task_id: str) -> TrainingTask:
     # 更新任务状态
     db_task = training_task.update(db, db_obj=db_task, obj_in={
         "status": "pending",
-        "start_time": datetime.now(),
+        "start_time": shanghai_now(),
         "end_time": None
     })
 
@@ -1334,7 +1336,7 @@ print(f"结果摘要: {{results}}")
             # 更新任务状态为失败
             db_task = training_task.update(db, db_obj=db_task, obj_in={
                 "status": "failed",
-                "end_time": datetime.now()
+                "end_time": shanghai_now()
             })
 
             raise Exception(f"Resume training process exited immediately with code {return_code}. Error: {error_message}")
@@ -1351,7 +1353,7 @@ print(f"结果摘要: {{results}}")
         # 更新任务状态为失败
         db_task = training_task.update(db, db_obj=db_task, obj_in={
             "status": "failed",
-            "end_time": datetime.now()
+            "end_time": shanghai_now()
         })
 
         raise HTTPException(
@@ -1418,7 +1420,7 @@ def get_training_logs(db: Session, task_id: str) -> Dict[str, Any]:
                     if db_task.status in ["running", "training", "downloading_model", "pending"]:
                         training_task.update(db, db_obj=db_task, obj_in={
                             "status": "failed",
-                            "end_time": datetime.now()
+                            "end_time": shanghai_now()
                         })
                     log_output = "训练进程已结束，但未生成日志文件。可能是训练过程中出现了错误"
             else:

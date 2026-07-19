@@ -5,7 +5,7 @@ import os
 import time
 import subprocess
 import threading
-import datetime
+from app.core.time_utils import shanghai_now
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.crud import training_task
@@ -71,7 +71,7 @@ class ProcessMonitor:
                                     # 日志中发现失败标记，训练失败
                                     training_task.update(db, db_obj=task, obj_in={
                                         "status": "failed",
-                                        "end_time": datetime.datetime.now()
+                                        "end_time": shanghai_now()
                                     })
                                     print(f"训练任务 {task.id} 失败")
                                 else:
@@ -160,7 +160,7 @@ class ProcessMonitor:
                         if task and task.status in ["running", "training", "downloading_model", "pending"]:
                             training_task.update(db, db_obj=task, obj_in={
                                 "status": "completed",
-                                "end_time": datetime.datetime.now()
+                                "end_time": shanghai_now()
                             })
                             print(f"训练任务 {task_id} 状态已更新为已完成")
                     finally:

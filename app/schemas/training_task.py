@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 from uuid import UUID
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 from app.schemas.dataset import Dataset
 from app.schemas.model import Model
+from app.core.time_utils import to_shanghai_iso
 
 # 硬件配置模型
 class HardwareConfig(BaseModel):
@@ -59,7 +60,9 @@ class TrainingTaskInDBBase(TrainingTaskBase):
         from_attributes = True
 
 class TrainingTask(TrainingTaskInDBBase):
-    pass
+    @field_serializer("start_time", "end_time")
+    def serialize_times(self, dt: Optional[datetime]) -> Optional[str]:
+        return to_shanghai_iso(dt)
 
 class TrainingTaskWithRelations(TrainingTask):
     dataset: Optional[Dataset] = None

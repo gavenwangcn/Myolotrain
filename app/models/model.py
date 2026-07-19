@@ -1,9 +1,9 @@
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base
+from app.core.time_utils import shanghai_now
 
 class Model(Base):
     __tablename__ = "models"
@@ -14,6 +14,6 @@ class Model(Base):
     path = Column(String, nullable=False)
     type = Column(String, nullable=False)  # yolov8*, yolo11*, yolov13*
     task = Column(String, nullable=False, default="detect")  # detect, segment, classify, pose
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=shanghai_now)
+    updated_at = Column(DateTime, default=shanghai_now, onupdate=shanghai_now)
     source = Column(String, default="upload")  # upload, training

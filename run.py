@@ -1,5 +1,8 @@
 import logging
 import os
+
+os.environ.setdefault("TZ", "Asia/Shanghai")
+
 import uvicorn
 from app.core.logging_config import configure_app_logging, get_uvicorn_log_config
 from app.db.init_db import init_db

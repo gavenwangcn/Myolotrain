@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect
 
@@ -12,6 +13,44 @@ from app.models.user import UserRole
 from app.models import Dataset, Model, TrainingTask, DetectionTask, AnnotationProject, ImageAnnotation, User
 
 logger = logging.getLogger(__name__)
+
+SHANGHAI_MIGRATION_MARKER = Path("logs/.shanghai_timezone_migrated")
+
+
+def migrate_naive_utc_timestamps_to_shanghai():
+    """One-time migration: legacy UTC naive timestamps -> Asia/Shanghai (+8h)."""
+    if SHANGHAI_MIGRATION_MARKER.exists():
+        return
+
+    tables_columns = {
+        "training_tasks": ["start_time", "end_time"],
+        "models": ["created_at", "updated_at"],
+        "datasets": ["created_at", "updated_at"],
+        "detection_tasks": ["created_at"],
+    }
+
+    try:
+        with engine.connect() as conn:
+            for table, columns in tables_columns.items():
+                inspector = inspect(engine)
+                if table not in inspector.get_table_names():
+                    continue
+                existing = {col["name"] for col in inspector.get_columns(table)}
+                for column in columns:
+                    if column not in existing:
+                        continue
+                    conn.execute(text(f"""
+                        UPDATE {table}
+                        SET {column} = {column} + INTERVAL '8 hours'
+                        WHERE {column} IS NOT NULL
+                    """))
+            conn.commit()
+        SHANGHAI_MIGRATION_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        SHANGHAI_MIGRATION_MARKER.write_text("migrated", encoding="utf-8")
+        logger.info("Migrated legacy UTC timestamps to Asia/Shanghai (+8 hours)")
+    except Exception as exc:
+        logger.warning("Shanghai timezone migration skipped or failed: %s", exc)
+
 
 def create_initial_admin():
     """创建初始管理员用户"""
@@ -241,6 +280,9 @@ def init_db():
 
         # 创建初始管理员用户
         create_initial_admin()
+
+        # 将历史 UTC 时间统一迁移为上海时区
+        migrate_naive_utc_timestamps_to_shanghai()
     except Exception as e:
         logger.error(f"Database initialization failed: {e}", exc_info=True)
         raise

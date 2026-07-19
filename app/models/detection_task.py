@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
+from app.core.time_utils import shanghai_now
 
 class DetectionTask(Base):
     __tablename__ = "detection_tasks"
@@ -15,7 +15,7 @@ class DetectionTask(Base):
     output_path = Column(String, nullable=True)
     parameters = Column(JSON, nullable=False)
     status = Column(String, default="pending")  # pending, running, completed, failed
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=shanghai_now)
 
     # Relationships
     model = relationship("Model")

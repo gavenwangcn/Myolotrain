@@ -5,10 +5,8 @@ import warnings
 import logging
 import multiprocessing
 
-# 禁用自动下载
+# 禁用自动下载（部分版本有效；AMP 外网下载由 app.patches.ultralytics_amp_patch 处理）
 os.environ['ULTRALYTICS_SKIP_DOWNLOAD'] = '1'
-# 禁用AMP检查
-os.environ['ULTRALYTICS_SKIP_AMP_CHECK'] = '1'
 
 # 设置多进程启动方法，确保与Windows兼容[主进程与子进程混乱，修改测试]
 # import torch
@@ -169,6 +167,13 @@ def main():
 
         # 导入 YOLO
         print('\n=== 导入 YOLO 模块 ===')
+        try:
+            from app.patches.ultralytics_amp_patch import apply_patch as apply_ultralytics_amp_patch
+            apply_ultralytics_amp_patch()
+            print('\n=== 已应用 AMP 离线补丁（跳过外网 yolov13n 下载）===')
+        except Exception as e:
+            print('\n=== 警告: AMP 离线补丁未生效: ' + str(e) + ' ===')
+
         from ultralytics import YOLO
 
         # 加载模型

@@ -8,6 +8,7 @@ RUN sed -i 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d
     sed -i 's/security.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
 
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
@@ -18,6 +19,10 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libglib2.0-0 \
     git \
+    curl \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -66,26 +71,58 @@ else:
     raise RuntimeError("PyTorch install failed from all indexes:\n" + "\n".join(errors))
 PY
 
-# Flash Attention（YOLOv13 HyperACE 必需；需可访问 GitHub Releases）
-# 构建机通常无 GPU，不做 CUDA 符号导入校验，只确保 wheel 安装成功
+# Flash Attention（YOLOv13 可选加速；下载失败时自动降级为 scaled_dot_product_attention）
 RUN pip install --no-cache-dir packaging ninja && \
     python - <<'PY'
 import importlib.metadata
+import os
 import subprocess
 import sys
+import urllib.request
 
 import torch
 
-base = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.6cxx11abi"
+base_name = "flash_attn-2.8.3+cu12torch2.6cxx11abi"
 suffix = "-cp312-cp312-linux_x86_64.whl"
 preferred = "TRUE" if torch._C._GLIBCXX_USE_CXX11_ABI else "FALSE"
 fallback = "FALSE" if preferred == "TRUE" else "TRUE"
+release_path = f"/Dao-AILab/flash-attention/releases/download/v2.8.3/{base_name}"
+mirrors = [
+    "https://github.com",
+    "https://ghfast.top",
+    "https://mirror.ghproxy.com",
+]
+wheel_dir = "/tmp/flash-attn-wheels"
+os.makedirs(wheel_dir, exist_ok=True)
 errors = []
 
+
+def download_wheel(abi: str) -> str:
+    filename = f"{base_name}{abi}{suffix}"
+    dest = os.path.join(wheel_dir, filename)
+    last_error = None
+    for mirror in mirrors:
+        url = f"{mirror}{release_path}{abi}{suffix}"
+        print(f"Downloading flash-attn wheel (cxx11abi={abi}) from {url}")
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "myolotrain-docker-build"})
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                data = resp.read()
+            if len(data) < 1024 * 1024 or not data.startswith(b"PK"):
+                raise RuntimeError(f"download looks invalid (size={len(data)})")
+            with open(dest, "wb") as f:
+                f.write(data)
+            print(f"Downloaded {filename}: {len(data)} bytes")
+            return dest
+        except Exception as exc:
+            last_error = f"{mirror}: {exc}"
+            print(f"FAILED: {last_error}")
+    raise RuntimeError(last_error or "all mirrors failed")
+
+
 for abi in (preferred, fallback):
-    wheel = f"{base}{abi}{suffix}"
-    print(f"Trying flash-attn wheel (cxx11abi={abi}): {wheel}")
     try:
+        wheel_path = download_wheel(abi)
         subprocess.check_call(
             [
                 sys.executable,
@@ -93,23 +130,18 @@ for abi in (preferred, fallback):
                 "pip",
                 "install",
                 "--no-cache-dir",
-                "--retries",
-                "5",
-                "--timeout",
-                "300",
-                wheel,
+                wheel_path,
                 "--no-build-isolation",
             ]
         )
         version = importlib.metadata.version("flash_attn")
         print(f"flash-attn installed OK: version={version}, cxx11abi={abi}")
         break
-    except (subprocess.CalledProcessError, importlib.metadata.PackageNotFoundError) as exc:
+    except Exception as exc:
         errors.append(f"{abi}: {exc}")
 else:
-    raise RuntimeError(
-        "flash-attn REQUIRED for YOLOv13 failed to install.\n"
-        "Ensure build host can reach GitHub Releases.\n"
+    print(
+        "WARNING: flash-attn install skipped. YOLOv13 will use scaled_dot_product_attention instead.\n"
         + "\n".join(errors)
     )
 PY
@@ -119,6 +151,8 @@ RUN pip install --no-cache-dir --retries 5 --timeout 300 \
     -r requirements.txt onnxruntime-gpu==1.21.0
 
 COPY . .
+
+RUN python scripts/patch_ultralytics_checks.py
 
 RUN mkdir -p app/static/uploads app/static/datasets app/static/models app/static/results app/static/annotations logs/tensorboard models
 

@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Text, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.db.session import Base
+from app.core.time_utils import shanghai_now
 
 class Dataset(Base):
     __tablename__ = "datasets"
@@ -15,8 +15,8 @@ class Dataset(Base):
     path = Column(String, nullable=False)
     classes = Column(JSON, nullable=False)
     image_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=shanghai_now)
+    updated_at = Column(DateTime, default=shanghai_now, onupdate=shanghai_now)
     status = Column(String, default="processing")  # processing, available, error
     is_external = Column(Boolean, default=False)  # 是否为外部数据集
     

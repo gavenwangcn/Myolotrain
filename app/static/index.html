@@ -357,8 +357,70 @@
                         </select>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">检测源</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="detection-source" id="detection-source-file" value="file" checked>
+                            <label class="form-check-label" for="detection-source-file">上传图片或视频</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="detection-source" id="detection-source-display" value="display">
+                            <label class="form-check-label" for="detection-source-display">屏幕/窗口</label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="detection-file-panel">
                         <label for="detection-file" class="form-label">上传图片或视频</label>
-                        <input class="form-control" type="file" id="detection-file" accept="image/*,video/*" required>
+                        <input class="form-control" type="file" id="detection-file" accept="image/*,video/*">
+                    </div>
+
+                    <div class="mb-3" id="detection-display-panel" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">屏幕/窗口采集</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                                    <button type="button" class="btn btn-outline-primary" id="detection-pick-display-btn">选择窗口/屏幕</button>
+                                    <span id="detection-display-source-label" class="text-muted small">尚未选择共享源</span>
+                                </div>
+                                <div class="alert alert-info mb-3">
+                                    <small>
+                                        先点击「选择窗口/屏幕」，在浏览器弹窗中选择游戏窗口或屏幕；预览正常后再点「开始检测」。<br>
+                                        <strong>会检测模型支持的所有类别</strong>（如 player、monster 等），无需像「视频处理→实时检测」那样设置监控目标。<br>
+                                        若长时间显示 0 个目标，请把下方<strong>置信度阈值</strong>从 0.9 降到 <strong>0.25~0.5</strong> 再试。
+                                    </small>
+                                </div>
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label for="detection-window-screen-x" class="form-label">窗口屏幕偏移 X（px）</label>
+                                                <input type="number" class="form-control" id="detection-window-screen-x" value="0" step="1">
+                                                <div class="form-text">游戏窗口客户区左上角在屏幕上的 X，用于换算屏幕鼠标坐标</div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="detection-window-screen-y" class="form-label">窗口屏幕偏移 Y（px）</label>
+                                                <input type="number" class="form-control" id="detection-window-screen-y" value="0" step="1">
+                                                <div class="form-text">游戏窗口客户区左上角在屏幕上的 Y（不含浏览器，填游戏窗口位置）</div>
+                                            </div>
+                                        </div>
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label for="detection-display-max-dimension" class="form-label">送检最大边长: <span id="detection-display-max-dimension-value">1280</span> px</label>
+                                                <input type="range" class="form-range" id="detection-display-max-dimension" min="640" max="1920" step="64" value="1280">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="detection-display-target-fps" class="form-label">送检帧率: <span id="detection-display-target-fps-value">2</span> FPS</label>
+                                                <input type="range" class="form-range" id="detection-display-target-fps" min="1" max="10" step="1" value="2">
+                                            </div>
+                                        </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">采集预览</label>
+                                        <video id="detection-preview-video" autoplay muted playsinline style="width:100%;max-height:240px;background:#000;display:none;"></video>
+                                    </div>
+                                </div>
+                                <div id="detection-stream-status" class="mt-2"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col">
@@ -372,15 +434,14 @@
                             <div class="text-center"><span id="iou-value">0.45</span></div>
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">开始检测</button>
+                    <button type="submit" class="btn btn-primary" id="detection-submit-btn">开始检测</button>
+                    <button type="button" class="btn btn-danger ms-2" id="detection-stop-stream-btn" style="display: none;">停止检测</button>
                 </form>
             </div>
         </div>
         <div class="mt-4" id="detection-result" style="display: none;">
             <h3>检测结果</h3>
-            <div class="text-center">
-                <div id="result-container"></div>
-            </div>
+            <div id="result-container"></div>
         </div>
     </template>
 
@@ -1124,10 +1185,16 @@
                                         <h6 class="mb-0">屏幕/窗口采集</h6>
                                     </div>
                                     <div class="card-body">
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                                            <button type="button" class="btn btn-outline-primary" id="pick-display-source-btn">
+                                                选择窗口/屏幕
+                                            </button>
+                                            <span id="display-source-label" class="text-muted small">尚未选择共享源</span>
+                                        </div>
                                         <div class="alert alert-info mb-3">
                                             <small>
-                                                点击「开始检测」后，浏览器会弹出系统选择器，请选择要共享的<strong>整个屏幕</strong>或<strong>应用窗口</strong>。
-                                                左侧「原始视频」区域会实时预览采集画面，用于确认是否获取到真实视频流。
+                                                请先点击上方「选择窗口/屏幕」，在<strong>浏览器弹出的系统对话框</strong>里挑选要共享的游戏窗口或整个屏幕。
+                                                选好后左侧「原始视频」会预览画面；确认无误再点「开始检测」。<br>
                                                 游戏建议使用<strong>窗口模式</strong>或<strong>无边框窗口</strong>；独占全屏可能导致黑屏。
                                             </small>
                                         </div>
@@ -2499,14 +2566,14 @@
     <!-- 主JS文件 -->
     <script src="static/js/main.js"></script>
     <!-- 模块化JavaScript文件 -->
-    <script src="static/js/training-manager.js?v=20260717"></script>
+    <script src="static/js/training-manager.js?v=20260719b"></script>
     <script src="static/js/dataset-manager.js"></script>
     <script src="static/js/model-manager.js"></script>
     <script src="static/js/user-manager.js"></script>
     <script src="static/js/opencv-tools.js"></script>
-    <script src="static/js/video-processor.js?v=20241219"></script>
+    <script src="static/js/video-processor.js?v=20260720"></script>
     <script src="static/js/online-annotation.js?v=20260716"></script>
-    <script src="static/js/detection-manager.js?v=20260719"></script>
+    <script src="static/js/detection-manager.js?v=20260724"></script>
     <script src="static/js/settings-manager.js"></script>
     <script src="static/js/monitoring.js"></script>
     <script src="static/js/export-models.js"></script>
